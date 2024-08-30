@@ -1,2 +1,2 @@
 # mickeyNPM
-Team Members: Shrijan Swaminathan
+Team Members: Shrijan Swaminathan, Rishab Pangal
