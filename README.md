@@ -1,3 +1,3 @@
 # mickeyNPM
 
-Team Members: Rishab Pangal, Shrijan Swaminathan, Anish Laddha
+Team Members: Rishab Pangal
