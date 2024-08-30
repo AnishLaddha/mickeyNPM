@@ -1,3 +1,3 @@
 # mickeyNPM
 
-Team Members: Rishab Pangal
+NO NAMES HERE
