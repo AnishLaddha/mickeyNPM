@@ -9,7 +9,9 @@ fi
 # Handle different argument values
 case "$1" in
   install)
-    echo "npm case is not implemented yet."
+    echo "Installing dependencies..."
+    npm i
+    echo "Done."
     ;;
   url)
     echo "URL case is not implemented yet."
