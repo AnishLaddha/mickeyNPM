@@ -1,4 +1,4 @@
-import { add, multiply } from "../src/math";
+import { add, multiply } from "../math";
 
 describe("Math functions", () => {
   it("should multiply 5 by 3", () => {
