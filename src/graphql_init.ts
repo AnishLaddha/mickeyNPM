@@ -1,7 +1,7 @@
 import { graphql, GraphqlResponseError } from "@octokit/graphql";
 import * as dotenv from 'dotenv';
 import { url_main } from './url_handler';
-import { CommitHistoryResponse } from "./interfaces/interface1";
+import { CommitHistoryResponse } from "./interfaces/commithistoryinterface";
 
 // Provide path to env file here
 dotenv.config({ path: '../../githubapi.env' });
