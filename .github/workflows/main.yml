@@ -1,24 +1,30 @@
 name: Github Actions Init
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   test-job:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
 
-    - name: Use Node 22.x
-      uses: actions/setup-node@v3
-      with:
-        node-version: '22.x'
+      - name: Use Node 22.x
+        uses: actions/setup-node@v3
+        with:
+          node-version: "22.x"
 
-    - name: Install dependencies
-      run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-    - name: Test
-      run: npm test
+      - name: Format Check
+        run: npx prettier --check .
+        
+      - name: TypeScript Type Check
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npm test

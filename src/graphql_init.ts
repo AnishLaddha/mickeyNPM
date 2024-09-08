@@ -1,22 +1,41 @@
 import { graphql, GraphqlResponseError } from "@octokit/graphql";
-import * as dotenv from 'dotenv';
+import * as dotenv from "dotenv";
+import { url_main } from "./url_handler";
+import { CommitHistoryResponse } from "./interfaces/commithistoryinterface";
 
 // Provide path to env file here
-dotenv.config({ path: '../../shrijan.env' });
-
-const githubToken = process.env.GITHUB_TOKEN
-
+dotenv.config({ path: "../../githubapi.env" });
+const githubToken = process.env.GITHUB_TOKEN;
 const graphqlWithAuth = graphql.defaults({
   headers: {
     authorization: `token ${githubToken}`,
   },
 });
 
-// make a query to the GitHub API, to get number of commits in the last year on https://github.com/octokit/graphql.js
-const query = `
+async function fetch_repo_info() {
+  const url = process.argv[2];
+  const obj = await url_main(url);
+  const owner = obj?.repo_owner;
+  const name = obj?.repo_name;
+
+  return { owner, name };
+}
+
+async function main() {
+  const { owner, name } = await fetch_repo_info();
+  const query = `
   query {
-    repository(owner: "octokit", name: "graphql.js") {
-      ref(qualifiedName: "main") {
+    repository(owner: "${owner}", name: "${name}") {
+      mainBranch: ref(qualifiedName: "refs/heads/main") {
+        target {
+          ... on Commit {
+            history {
+              totalCount
+            }
+          }
+        }
+      }
+      masterBranch: ref(qualifiedName: "refs/heads/master") {
         target {
           ... on Commit {
             history {
@@ -28,29 +47,22 @@ const query = `
     }
   }
 `;
-
-interface CommitHistoryResponse {
-  repository: {
-    ref: {
-      target: {
-        history: {
-          totalCount: number;
-        };
-      };
-    };
-  };
-}
-
-async function main() {
   try {
-    const result = await graphqlWithAuth<CommitHistoryResponse>(query);
-    console.log(result.repository.ref.target.history.totalCount);
+    const response = await graphqlWithAuth<CommitHistoryResponse>(query);
+    if (response.repository.mainBranch) {
+      console.log(
+        `Main branch has ${response.repository.mainBranch.target.history.totalCount} commits`,
+      );
+    }
+    if (response.repository.masterBranch) {
+      console.log(
+        `Master branch has ${response.repository.masterBranch.target.history.totalCount} commits`,
+      );
+    }
   } catch (error) {
     if (error instanceof GraphqlResponseError) {
-      console.log("Request failed:", error.request);
-      console.log(error.message); // Field 'bioHtml' doesn't exist on type 'User'
-    } else {
-      console.log("Request failed");
+      console.error(error.request);
+      console.error(error.response);
     }
   }
 }

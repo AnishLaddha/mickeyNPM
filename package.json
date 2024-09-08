@@ -14,8 +14,11 @@
   "license": "ISC",
   "dependencies": {
     "@octokit/graphql": "^8.1.1",
+    "axios": "^1.7.7",
     "dotenv": "^16.4.5",
+    "isomorphic-git": "^1.27.1",
     "octokit": "^4.0.2",
+    "prettier": "^3.3.3",
     "tsx": "^4.19.0"
   },
   "devDependencies": {
