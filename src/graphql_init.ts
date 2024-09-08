@@ -1,11 +1,11 @@
 import { graphql, GraphqlResponseError } from "@octokit/graphql";
-import * as dotenv from 'dotenv';
-import { url_main } from './url_handler';
+import * as dotenv from "dotenv";
+import { url_main } from "./url_handler";
 import { CommitHistoryResponse } from "./interfaces/commithistoryinterface";
 
 // Provide path to env file here
-dotenv.config({ path: '../../githubapi.env' });
-const githubToken = process.env.GITHUB_TOKEN
+dotenv.config({ path: "../../githubapi.env" });
+const githubToken = process.env.GITHUB_TOKEN;
 const graphqlWithAuth = graphql.defaults({
   headers: {
     authorization: `token ${githubToken}`,
@@ -49,11 +49,15 @@ async function main() {
 `;
   try {
     const response = await graphqlWithAuth<CommitHistoryResponse>(query);
-    if (response.repository.mainBranch){
-      console.log(`Main branch has ${response.repository.mainBranch.target.history.totalCount} commits`);
+    if (response.repository.mainBranch) {
+      console.log(
+        `Main branch has ${response.repository.mainBranch.target.history.totalCount} commits`,
+      );
     }
-    if (response.repository.masterBranch){
-      console.log(`Master branch has ${response.repository.masterBranch.target.history.totalCount} commits`);
+    if (response.repository.masterBranch) {
+      console.log(
+        `Master branch has ${response.repository.masterBranch.target.history.totalCount} commits`,
+      );
     }
   } catch (error) {
     if (error instanceof GraphqlResponseError) {
@@ -62,6 +66,5 @@ async function main() {
     }
   }
 }
-
 
 main();
