@@ -22,7 +22,7 @@ jobs:
 
       - name: Format Check
         run: npx prettier --check .
-        
+
       - name: TypeScript Type Check
         run: npx tsc --noEmit
 
