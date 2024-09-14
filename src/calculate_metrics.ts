@@ -116,7 +116,8 @@ async function calculate_rampup_metric(
     depth: 1,
   });
   //perform analysis on the cloned repo for rampup time
-
+  // Measure the time from when a developer first forks or clones the repository to when they submit their first pull request.
+  
   // delete the cloned repo
   fs.rm(`./repos/${name}`, { recursive: true }, (err) => {
     if (err) {
