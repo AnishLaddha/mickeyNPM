@@ -1,11 +1,12 @@
 import { graphql, GraphqlResponseError } from "@octokit/graphql";
 import * as dotenv from "dotenv";
 import { url_main } from "./url_handler";
-import { LicenseInfoInterface } from "./interfaces/licenseinfointerface";
+import { LicenseInfo } from "./interfaces/LicenseInfo";
+import { RepositoryResponse } from "./interfaces/RepositoryResponse";
 import { CorrectnessInterface } from "./interfaces/correctnessinterface";
 import * as git from "isomorphic-git";
 import fs from "fs";
-import http from 'isomorphic-git/http/node';
+import http from "isomorphic-git/http/node";
 
 const lgplCompatibleSpdxIds: string[] = [
   "LGPL-2.1-only",
@@ -39,6 +40,7 @@ const graphqlWithAuth = graphql.defaults({
 // Modify logic if necessary, this is barebones implementation
 function check_license_text(licenseText: string | undefined) {
   const normalizedText = licenseText?.toLowerCase();
+
   // List of licenses known to be compatible with LGPL v2.1
   const compatibleLicenses = [
     "mit license",
@@ -56,32 +58,25 @@ function check_license_text(licenseText: string | undefined) {
     normalizedText?.includes(license),
   );
 
-  // Key phrases that indicate permissive terms
   const permissivePhrases = [
     "permission is hereby granted, free of charge",
     "redistribute",
     "without restriction",
     "provided that the above copyright notice",
   ];
-
-  // Check if the license contains permissive phrases
   const containsPermissivePhrases = permissivePhrases.some((phrase) =>
     normalizedText?.includes(phrase),
   );
 
-  // Check for phrases that might indicate incompatibility
   const incompatiblePhrases = [
     "not for use in",
     "not licensed for",
     "proprietary",
   ];
-
   const containsIncompatiblePhrases = incompatiblePhrases.some((phrase) =>
     normalizedText?.includes(phrase),
   );
 
-  // Consider compatible if it mentions a compatible license or contains permissive phrases,
-  // and doesn't contain incompatible phrases
   return (
     (mentionsCompatibleLicense || containsPermissivePhrases) &&
     !containsIncompatiblePhrases
@@ -130,6 +125,15 @@ async function calculate_rampup_metric(
 }
 
 // add blank function to calculate correctness metric
+async function correctness_metric() {
+  return 0;
+}
+
+// add blank function to calculate responsive maintenance metric
+async function responsive_maintenance_metric(
+  owner: string | undefined,
+  name: string | undefined,
+) {
 async function calculate_correctness_metric(
   owner: string | undefined,
   name: string | undefined,
@@ -218,32 +222,36 @@ async function responsive_maintenance_metric(owner: string | undefined, name: st
   `;
 
   try {
-    const response = await graphqlWithAuth<RepositoryResponse>(query); 
+    const response = await graphqlWithAuth<RepositoryResponse>(query);
     const pullRequests = response.repository.pullRequests.edges;
     const issues = response.repository.issues.edges;
-    
-    //  Pull Requests 
+
+    //  Pull Requests
     let totalPrResponseTime = 0;
     let resolvedPrs = 0;
-  
+
     pullRequests.forEach((pr: any) => {
       if (pr.node.closedAt || pr.node.mergedAt) {
-        const createdAt = pr.node.createdAt ? new Date(pr.node.createdAt).getTime() : 0; //if undefined
-        const closedOrMergedAt = pr.node.closedAt || pr.node.mergedAt
-          ? new Date(pr.node.closedAt || pr.node.mergedAt).getTime()
-          : 0; //if undefined!
-    
+        const createdAt = pr.node.createdAt
+          ? new Date(pr.node.createdAt).getTime()
+          : 0; //if undefined
+        const closedOrMergedAt =
+          pr.node.closedAt || pr.node.mergedAt
+            ? new Date(pr.node.closedAt || pr.node.mergedAt).getTime()
+            : 0; //if undefined!
+
         totalPrResponseTime += closedOrMergedAt - createdAt;
         resolvedPrs++;
       }
     });
-  
-    const avgPrResponseTime = resolvedPrs > 0 ? totalPrResponseTime / resolvedPrs : Infinity;
 
-  // response time
+    const avgPrResponseTime =
+      resolvedPrs > 0 ? totalPrResponseTime / resolvedPrs : Infinity;
+
+    // response time
     let totalIssueResponseTime = 0;
     let resolvedIssues = 0;
-  
+
     issues.forEach((issue) => {
       if (issue.node.closedAt) {
         const createdAt = new Date(issue.node.createdAt).getTime();
@@ -252,20 +260,28 @@ async function responsive_maintenance_metric(owner: string | undefined, name: st
         resolvedIssues++;
       }
     });
-  
-    const avgIssueResponseTime = resolvedIssues > 0 ? totalIssueResponseTime / resolvedIssues : Infinity;
-  
+
+    const avgIssueResponseTime =
+      resolvedIssues > 0 ? totalIssueResponseTime / resolvedIssues : Infinity;
+
     // responsiveness score
     let responsivenessScore = 0;
-  
+
     const maxAcceptableResponseTime = 86400000 * 7;
-    if (avgPrResponseTime < maxAcceptableResponseTime && avgIssueResponseTime < maxAcceptableResponseTime) {
+    if (
+      avgPrResponseTime < maxAcceptableResponseTime &&
+      avgIssueResponseTime < maxAcceptableResponseTime
+    ) {
       responsivenessScore = 1;
-    } else if (avgPrResponseTime < maxAcceptableResponseTime || avgIssueResponseTime < maxAcceptableResponseTime) {
+    } else if (
+      avgPrResponseTime < maxAcceptableResponseTime ||
+      avgIssueResponseTime < maxAcceptableResponseTime
+    ) {
       responsivenessScore = 0.7;
     } else {
       responsivenessScore = 0.3;
     }
+
     return {
       responsivenessScore,
       responsive_latency: getLatency(startTime),
@@ -274,9 +290,7 @@ async function responsive_maintenance_metric(owner: string | undefined, name: st
     console.error("Error fetching repository data:", error);
     return { responsivenessScore: 0, responsive_latency: 0 };
   }
-  
 }
-
 
 async function calculate_license_metric(
   owner: string | undefined,
@@ -307,7 +321,7 @@ async function calculate_license_metric(
   `;
 
   try {
-    const response = await graphqlWithAuth<LicenseInfoInterface>(query);
+    const response = await graphqlWithAuth<LicenseInfo>(query);
     const licenseInfo = response.repository.licenseInfo;
     const licenseText =
       response.repository.mainLicense?.text ||
@@ -357,10 +371,27 @@ function calculate_net_score(
 }
 async function main() {
   const { owner, name } = await fetch_repo_info();
+  const { licenseScore, license_latency } = await calculate_license_metric(
+    owner,
+    name,
+  );
+  const { responsivenessScore, responsive_latency } =
+    await responsive_maintenance_metric(owner, name);
+  // await calculate_rampup_metric(owner, name);
   const { licenseScore, license_latency } = await calculate_license_metric(owner, name);
   const { responsivenessScore, responsive_latency }= await responsive_maintenance_metric(owner, name);
   const { correctnessScore, correctness_latency }= await calculate_correctness_metric(owner, name);
   // build ndjson object
+  // const data = {
+  //   licenseScore,
+  //   license_latency,
+  //   responsivenessScore,
+  //   responsive_latency,
+  //   correctnessScore,
+  //   correctness_latency,
+  // };
+  // const ndjson = [JSON.stringify(data)].join("\n");
+  // console.log(ndjson);
   // const data = {
   //   licenseScore,
   //   license_latency,

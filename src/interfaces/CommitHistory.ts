@@ -1,4 +1,4 @@
-export interface CommitHistoryResponse {
+export interface CommitHistory {
   repository: {
     mainBranch?: {
       target: {
