@@ -5,7 +5,7 @@ import { LicenseInfoInterface } from "./interfaces/licenseinfointerface";
 import { CorrectnessInterface } from "./interfaces/correctnessinterface";
 import * as git from "isomorphic-git";
 import fs from "fs";
-import http from "isomorphic-git/http/node";
+import http from 'isomorphic-git/http/node';
 
 const lgplCompatibleSpdxIds: string[] = [
   "LGPL-2.1-only",
@@ -206,9 +206,95 @@ async function calculate_correctness_metric(
 }
 
 // add blank function to calculate responsive maintenance metric
-async function responsive_maintenance_metric() {
-  return 0;
+async function responsive_maintenance_metric(owner: string | undefined, name: string | undefined) {
+  const startTime = performance.now();
+  const query = `
+  query {
+    repository(owner: "${owner}", name: "${name}") {
+      pullRequests(first: 100, states: [OPEN, MERGED, CLOSED]) {
+        edges {
+          node {
+            createdAt
+            closedAt
+            mergedAt
+            state
+          }
+        }
+      }
+      issues(first: 100, states: [OPEN, CLOSED]) {
+        edges {
+          node {
+            createdAt
+            closedAt
+            state
+          }
+        }
+      }
+    }
+  }
+  `;
+
+  try {
+    const response = await graphqlWithAuth<RepositoryResponse>(query); 
+    const pullRequests = response.repository.pullRequests.edges;
+    const issues = response.repository.issues.edges;
+    
+    //  Pull Requests 
+    let totalPrResponseTime = 0;
+    let resolvedPrs = 0;
+  
+    pullRequests.forEach((pr: any) => {
+      if (pr.node.closedAt || pr.node.mergedAt) {
+        const createdAt = pr.node.createdAt ? new Date(pr.node.createdAt).getTime() : 0; //if undefined
+        const closedOrMergedAt = pr.node.closedAt || pr.node.mergedAt
+          ? new Date(pr.node.closedAt || pr.node.mergedAt).getTime()
+          : 0; //if undefined!
+    
+        totalPrResponseTime += closedOrMergedAt - createdAt;
+        resolvedPrs++;
+      }
+    });
+  
+    const avgPrResponseTime = resolvedPrs > 0 ? totalPrResponseTime / resolvedPrs : Infinity;
+
+  // response time
+    let totalIssueResponseTime = 0;
+    let resolvedIssues = 0;
+  
+    issues.forEach((issue) => {
+      if (issue.node.closedAt) {
+        const createdAt = new Date(issue.node.createdAt).getTime();
+        const closedAt = new Date(issue.node.closedAt).getTime();
+        totalIssueResponseTime += closedAt - createdAt;
+        resolvedIssues++;
+      }
+    });
+  
+    const avgIssueResponseTime = resolvedIssues > 0 ? totalIssueResponseTime / resolvedIssues : Infinity;
+  
+    // responsiveness score
+    let responsivenessScore = 0;
+  
+    const maxAcceptableResponseTime = 86400000 * 7;
+    if (avgPrResponseTime < maxAcceptableResponseTime && avgIssueResponseTime < maxAcceptableResponseTime) {
+      responsivenessScore = 1;
+    } else if (avgPrResponseTime < maxAcceptableResponseTime || avgIssueResponseTime < maxAcceptableResponseTime) {
+      responsivenessScore = 0.7;
+    } else {
+      responsivenessScore = 0.3;
+    }
+  
+    return {
+      responsivenessScore,
+      responsive_latency: getLatency(startTime),
+    };
+  } catch (error) {
+    console.error("Error fetching repository data:", error);
+    return { responsivenessScore: 0, responsive_latency: 0 };
+  }
+  
 }
+
 
 async function calculate_license_metric(
   owner: string | undefined,
@@ -290,6 +376,10 @@ function calculate_net_score(
 async function main() {
   const { owner, name } = await fetch_repo_info();
   const { licenseScore, license_latency } = await calculate_license_metric(owner, name);
+<<<<<<< HEAD
+=======
+  const { responsivenessScore, responsive_latency}= await responsive_maintenance_metric(owner, name);
+>>>>>>> 9ccc3c093a6eceaecfb56e065bd4820d986b19ad
   // build ndjson object
   const data = {
     licenseScore,
@@ -299,6 +389,7 @@ async function main() {
     JSON.stringify({ licenseScore, license_latency})
   ].join('\n');
   console.log(ndjson);
+<<<<<<< HEAD
   // const { correctnessScore, correctness_latency } = await calculate_correctness_metric(owner, name);
   // // build ndjson object
   // const data = {
@@ -310,6 +401,13 @@ async function main() {
   // ].join('\n');
   // console.log(ndjson);
   // await calculate_rampup_metric(owner, name);
+=======
+  await calculate_rampup_metric(owner, name);
+
+console.log('License metrics:', { licenseScore, license_latency });
+
+console.log('Responsive maintaince', { responsivenessScore, responsive_latency});
+>>>>>>> 9ccc3c093a6eceaecfb56e065bd4820d986b19ad
 }
 
 if (require.main === module) {
