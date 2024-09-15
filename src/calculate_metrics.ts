@@ -177,8 +177,8 @@ async function calculate_correctness_metric(
       ).toFixed(3),
     );
     return {
-      correctnessScore: correctnessScore,
-      correctness_latency: getLatency(startTime),
+      Correctness: correctnessScore,
+      Correctness_Latency: getLatency(startTime),
     };
   } catch (error) {
     if (error instanceof GraphqlResponseError) {
@@ -283,8 +283,8 @@ async function calculate_responsiveness_metric(
     }
 
     return {
-      responsivenessScore,
-      responsive_latency: getLatency(startTime),
+      ResponsiveMaintainer: responsivenessScore,
+      ResponsiveMaintainer_Latency: getLatency(startTime),
     };
   } catch (error) {
     console.error("Error fetching repository data:", error);
@@ -332,7 +332,7 @@ async function calculate_license_metric(
     let licenseScore = 0;
     if (licenseInfo == null || licenseID == null) {
       // No license info found
-      return { licenseScore, license_latency: getLatency(startTime) };
+      return { License: licenseScore, License_Latency: getLatency(startTime) };
     }
 
     if (
@@ -345,14 +345,14 @@ async function calculate_license_metric(
       licenseScore = 1;
     }
 
-    return { licenseScore, license_latency: getLatency(startTime) };
+    return { License: licenseScore, License_Latency: getLatency(startTime) };
   } catch (error) {
     if (error instanceof GraphqlResponseError) {
       console.log(error.message);
     } else {
       console.log(error);
     }
-    return { licenseScore: 0, license_latency: 0 };
+    return { License: 0, License_Latency: 0 };
   }
 }
 
@@ -372,23 +372,23 @@ function calculate_net_score(
 
 async function main() {
   const { owner, name } = await fetch_repo_info();
-  const { licenseScore, license_latency } = await calculate_license_metric(
+  const { License, License_Latency } = await calculate_license_metric(
     owner,
     name,
   );
-  const { responsivenessScore, responsive_latency } =
+  const { ResponsiveMaintainer, ResponsiveMaintainer_Latency } =
     await calculate_responsiveness_metric(owner, name);
-  const { correctnessScore, correctness_latency } =
+  const { Correctness, Correctness_Latency } =
     await calculate_correctness_metric(owner, name);
-  // const { rampupScore, rampup_latency } = await calculate_rampup_metric(owner, name);
+  // const { RampUp, RampUp_Latency } = await calculate_rampup_metric(owner, name);
   // build ndjson object
   const data = {
-    licenseScore,
-    license_latency,
-    responsivenessScore,
-    responsive_latency,
-    correctnessScore,
-    correctness_latency,
+    License,
+    License_Latency,
+    ResponsiveMaintainer,
+    ResponsiveMaintainer_Latency,
+    Correctness,
+    Correctness_Latency,
   };
   const ndjson = [JSON.stringify(data)].join("\n");
   console.log(ndjson);
