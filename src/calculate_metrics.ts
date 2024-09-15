@@ -96,7 +96,6 @@ async function fetch_repo_info() {
   return { owner, name };
 }
 
-// add blank function to calculate rampup time metric
 async function calculate_rampup_metric(
   owner: string | undefined,
   name: string | undefined,
@@ -124,16 +123,6 @@ async function calculate_rampup_metric(
   return { rampupScore: 0, rampup_latency: getLatency(startTime) };
 }
 
-// add blank function to calculate correctness metric
-async function correctness_metric() {
-  return 0;
-}
-
-// add blank function to calculate responsive maintenance metric
-async function responsive_maintenance_metric(
-  owner: string | undefined,
-  name: string | undefined,
-) {
 async function calculate_correctness_metric(
   owner: string | undefined,
   name: string | undefined,
@@ -181,7 +170,7 @@ async function calculate_correctness_metric(
     //calculate recent commit ratio (past 30 days and max at 1)
     const recentCommitRatio = Math.min(recentCommits / 30, 1);
     //calculate correctness score (ensuring its between 0 and 1)
-    const correctnessScore = Math.max(0, Math.min((issueRatio + prRatio + recentCommitRatio) / 3));
+    const correctnessScore = Number(Math.max(0, Math.min((issueRatio + prRatio + recentCommitRatio) / 3)).toFixed(3));
     return { correctnessScore: correctnessScore, correctness_latency: getLatency(startTime) };
   } catch (error) {
     if (error instanceof GraphqlResponseError) {
@@ -193,7 +182,7 @@ async function calculate_correctness_metric(
   }
 }
 
-async function responsive_maintenance_metric(owner: string | undefined, name: string | undefined) {
+async function calculate_responsiveness_metric(owner: string | undefined, name: string | undefined) {
   const startTime = performance.now();
   const query = `
   query {
@@ -369,42 +358,26 @@ function calculate_net_score(
     0.25 * responsiveMaintenanceScore
   );
 }
+
 async function main() {
   const { owner, name } = await fetch_repo_info();
-  const { licenseScore, license_latency } = await calculate_license_metric(
-    owner,
-    name,
-  );
-  const { responsivenessScore, responsive_latency } =
-    await responsive_maintenance_metric(owner, name);
-  // await calculate_rampup_metric(owner, name);
   const { licenseScore, license_latency } = await calculate_license_metric(owner, name);
-  const { responsivenessScore, responsive_latency }= await responsive_maintenance_metric(owner, name);
-  const { correctnessScore, correctness_latency }= await calculate_correctness_metric(owner, name);
+  const { responsivenessScore, responsive_latency } = await calculate_responsiveness_metric(owner, name);
+  const { correctnessScore, correctness_latency } = await calculate_correctness_metric(owner, name);
+  // const { rampupScore, rampup_latency } = await calculate_rampup_metric(owner, name);
   // build ndjson object
-  // const data = {
-  //   licenseScore,
-  //   license_latency,
-  //   responsivenessScore,
-  //   responsive_latency,
-  //   correctnessScore,
-  //   correctness_latency,
-  // };
-  // const ndjson = [JSON.stringify(data)].join("\n");
-  // console.log(ndjson);
-  // const data = {
-  //   licenseScore,
-  //   license_latency,
-  // };
-  // const ndjson = [
-  //   JSON.stringify({ licenseScore, license_latency})
-  // ].join('\n');
-  // console.log(ndjson);
-  // await calculate_rampup_metric(owner, name);
-
-console.log('License metrics:', { licenseScore, license_latency });
-console.log('Responsive maintaince', { responsivenessScore, responsive_latency});
-console.log('Correctness', { correctnessScore, correctness_latency});
+  const data = {
+    licenseScore,
+    license_latency,
+    responsivenessScore,
+    responsive_latency,
+    correctnessScore,
+    correctness_latency,
+  };
+  const ndjson = [
+    JSON.stringify(data)
+  ].join('\n');
+  console.log(ndjson);
 }
 
 if (require.main === module) {
