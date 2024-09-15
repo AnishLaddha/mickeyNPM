@@ -1,4 +1,4 @@
-export interface LicenseInfoInterface {
+export interface LicenseInfo {
   repository: {
     licenseInfo: {
       name: string;
