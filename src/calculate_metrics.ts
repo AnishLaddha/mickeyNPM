@@ -2,6 +2,7 @@ import { graphql, GraphqlResponseError } from "@octokit/graphql";
 import * as dotenv from "dotenv";
 import { url_main } from "./url_handler";
 import { LicenseInfoInterface } from "./interfaces/licenseinfointerface";
+import { CorrectnessInterface } from "./interfaces/correctnessinterface";
 import * as git from "isomorphic-git";
 import fs from "fs";
 import http from "isomorphic-git/http/node";
@@ -129,8 +130,79 @@ async function calculate_rampup_metric(
 }
 
 // add blank function to calculate correctness metric
-async function correctness_metric() {
-  return 0;
+async function calculate_correctness_metric(
+  owner: string | undefined,
+  name: string | undefined,
+) {
+  const startTime = performance.now();
+  const query = `
+  query($owner: String!, $name: String!) {
+    repository(owner: $owner, name: $name) {
+      issues(states: OPEN) {
+        totalCount
+      }
+      closedIssues: issues(states: CLOSED) {
+        totalCount
+      }
+      pullRequests(states: OPEN) {
+        totalCount
+      }
+      releases {
+        totalCount
+      }
+      defaultBranchRef {
+        target {
+          ... on Commit {
+            history(since: "${new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()}") {
+              totalCount
+            }
+          }
+        }
+      }
+    }
+  }
+  `;
+  try {
+
+  } catch (error) {
+    
+  }
+    //   if (error instanceof GraphqlResponseError) {
+  //     console.log(error.message);
+  //   } else {
+  //     console.log(error);
+  //   }
+  //   return { licenseScore: 0, license_latency: 0 };
+  // }
+  // const query = `
+  // query {
+  //   repository(owner: "${owner}", name: "${name}") {
+  //     issues(states: OPEN) {
+  //       totalCount
+  //     }
+  //     pullRequests(states: OPEN) {
+  //       totalCount
+  //     }
+  //   }
+  // }
+  // `;
+  // try {
+  //   const response = await graphqlWithAuth<CorrectnessInterface>(query);
+  //   // const openIssuesCount = response.repository.issues.totalCount;
+  //   // const openPullsCount = response.repository.pullRequests.totalCount;
+
+  //   // // Example metric calculation: fewer open issues and PRs means higher correctness
+  //   // const correctness = 100 - (openIssuesCount + openPullsCount);
+
+  //   return { correctnessScore: correctness > 0 ? correctness : 0, correctness_latency: getLatency(startTime) };
+  // } catch (error) {
+  //   if (error instanceof GraphqlResponseError) {
+  //     console.log(error.message);
+  //   } else {
+  //     console.log(error);
+  //   }
+  //   return { licenseScore: 0, license_latency: 0 };
+  // }
 }
 
 // add blank function to calculate responsive maintenance metric
@@ -215,20 +287,29 @@ function calculate_net_score(
     0.25 * responsiveMaintenanceScore
   );
 }
-
 async function main() {
   const { owner, name } = await fetch_repo_info();
-  // const { licenseScore, license_latency } = await calculate_license_metric(owner, name);
+  const { licenseScore, license_latency } = await calculate_license_metric(owner, name);
+  // build ndjson object
+  const data = {
+    licenseScore,
+    license_latency,
+  };
+  const ndjson = [
+    JSON.stringify({ licenseScore, license_latency})
+  ].join('\n');
+  console.log(ndjson);
+  // const { correctnessScore, correctness_latency } = await calculate_correctness_metric(owner, name);
   // // build ndjson object
   // const data = {
-  //   licenseScore,
-  //   license_latency,
+  //   correctnessScore,
+  //   correctness_latency,
   // };
   // const ndjson = [
-  //   JSON.stringify({ licenseScore, license_latency})
+  //   JSON.stringify({ correctnessScore, correctness_latency})
   // ].join('\n');
   // console.log(ndjson);
-  await calculate_rampup_metric(owner, name);
+  // await calculate_rampup_metric(owner, name);
 }
 
 if (require.main === module) {
