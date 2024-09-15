@@ -26,12 +26,6 @@ LGPL V2.1. Please ensure that you change the location of your `.env` file with t
    cd mickeyNPM
    ```
 
-3. Install the dependencies:
-
-   ```sh
-   npm ci
-   ```
-
 ## Running the Code
 
 To run the code and measure the ramp-up time for a repository, follow these steps:
