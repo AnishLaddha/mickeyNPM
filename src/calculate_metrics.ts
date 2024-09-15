@@ -136,8 +136,8 @@ async function calculate_correctness_metric(
 ) {
   const startTime = performance.now();
   const query = `
-  query($owner: String!, $name: String!) {
-    repository(owner: $owner, name: $name) {
+  query {
+    repository(owner: "${owner}", name: "${name}") {
       issues(states: OPEN) {
         totalCount
       }
@@ -163,49 +163,32 @@ async function calculate_correctness_metric(
   }
   `;
   try {
-
+    const response = await graphqlWithAuth<CorrectnessInterface>(query);
+    const repo = response.repository;
+    const openIssues = repo.issues.totalCount;
+    const closedIssues = repo.closedIssues.totalCount;
+    const openPullRequests = repo.pullRequests.totalCount;
+    const releases = repo.releases.totalCount;
+    const recentCommits = repo.defaultBranchRef.target.history.totalCount;
+    //calculate issue ratio
+    const issueRatio = closedIssues / (openIssues + closedIssues) || 0;
+    // calculate pr ratio
+    const prRatio = releases / (openPullRequests + releases) || 0;
+    //calculate recent commit ratio (past 30 days and max at 1)
+    const recentCommitRatio = Math.min(recentCommits / 30, 1);
+    //calculate correctness score (ensuring its between 0 and 1)
+    const correctnessScore = Math.max(0, Math.min((issueRatio + prRatio + recentCommitRatio) / 3));
+    return { correctnessScore: correctnessScore, correctness_latency: getLatency(startTime) };
   } catch (error) {
-    
+    if (error instanceof GraphqlResponseError) {
+      console.log(error.message);
+    } else {
+      console.log(error);
+    }
+    return { licenseScore: 0, license_latency: 0 };
   }
-    //   if (error instanceof GraphqlResponseError) {
-  //     console.log(error.message);
-  //   } else {
-  //     console.log(error);
-  //   }
-  //   return { licenseScore: 0, license_latency: 0 };
-  // }
-  // const query = `
-  // query {
-  //   repository(owner: "${owner}", name: "${name}") {
-  //     issues(states: OPEN) {
-  //       totalCount
-  //     }
-  //     pullRequests(states: OPEN) {
-  //       totalCount
-  //     }
-  //   }
-  // }
-  // `;
-  // try {
-  //   const response = await graphqlWithAuth<CorrectnessInterface>(query);
-  //   // const openIssuesCount = response.repository.issues.totalCount;
-  //   // const openPullsCount = response.repository.pullRequests.totalCount;
-
-  //   // // Example metric calculation: fewer open issues and PRs means higher correctness
-  //   // const correctness = 100 - (openIssuesCount + openPullsCount);
-
-  //   return { correctnessScore: correctness > 0 ? correctness : 0, correctness_latency: getLatency(startTime) };
-  // } catch (error) {
-  //   if (error instanceof GraphqlResponseError) {
-  //     console.log(error.message);
-  //   } else {
-  //     console.log(error);
-  //   }
-  //   return { licenseScore: 0, license_latency: 0 };
-  // }
 }
 
-// add blank function to calculate responsive maintenance metric
 async function responsive_maintenance_metric(owner: string | undefined, name: string | undefined) {
   const startTime = performance.now();
   const query = `
@@ -283,7 +266,6 @@ async function responsive_maintenance_metric(owner: string | undefined, name: st
     } else {
       responsivenessScore = 0.3;
     }
-  
     return {
       responsivenessScore,
       responsive_latency: getLatency(startTime),
@@ -376,38 +358,22 @@ function calculate_net_score(
 async function main() {
   const { owner, name } = await fetch_repo_info();
   const { licenseScore, license_latency } = await calculate_license_metric(owner, name);
-<<<<<<< HEAD
-=======
-  const { responsivenessScore, responsive_latency}= await responsive_maintenance_metric(owner, name);
->>>>>>> 9ccc3c093a6eceaecfb56e065bd4820d986b19ad
+  const { responsivenessScore, responsive_latency }= await responsive_maintenance_metric(owner, name);
+  const { correctnessScore, correctness_latency }= await calculate_correctness_metric(owner, name);
   // build ndjson object
-  const data = {
-    licenseScore,
-    license_latency,
-  };
-  const ndjson = [
-    JSON.stringify({ licenseScore, license_latency})
-  ].join('\n');
-  console.log(ndjson);
-<<<<<<< HEAD
-  // const { correctnessScore, correctness_latency } = await calculate_correctness_metric(owner, name);
-  // // build ndjson object
   // const data = {
-  //   correctnessScore,
-  //   correctness_latency,
+  //   licenseScore,
+  //   license_latency,
   // };
   // const ndjson = [
-  //   JSON.stringify({ correctnessScore, correctness_latency})
+  //   JSON.stringify({ licenseScore, license_latency})
   // ].join('\n');
   // console.log(ndjson);
   // await calculate_rampup_metric(owner, name);
-=======
-  await calculate_rampup_metric(owner, name);
 
 console.log('License metrics:', { licenseScore, license_latency });
-
 console.log('Responsive maintaince', { responsivenessScore, responsive_latency});
->>>>>>> 9ccc3c093a6eceaecfb56e065bd4820d986b19ad
+console.log('Correctness', { correctnessScore, correctness_latency});
 }
 
 if (require.main === module) {
