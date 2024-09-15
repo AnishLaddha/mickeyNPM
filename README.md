@@ -17,7 +17,7 @@ LGPL V2.1. Please ensure that you change the location of your `.env` file with t
 1. Clone the repository:
 
    ```sh
-   git clone https://github.com/your-username/mickeyNPM.git
+   git clone https://github.com/shrijan-swaminathan/mickeyNPM
    ```
 
 2. Navigate to the project directory:
