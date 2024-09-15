@@ -170,8 +170,16 @@ async function calculate_correctness_metric(
     //calculate recent commit ratio (past 30 days and max at 1)
     const recentCommitRatio = Math.min(recentCommits / 30, 1);
     //calculate correctness score (ensuring its between 0 and 1)
-    const correctnessScore = Number(Math.max(0, Math.min((issueRatio + prRatio + recentCommitRatio) / 3)).toFixed(3));
-    return { correctnessScore: correctnessScore, correctness_latency: getLatency(startTime) };
+    const correctnessScore = Number(
+      Math.max(
+        0,
+        Math.min((issueRatio + prRatio + recentCommitRatio) / 3),
+      ).toFixed(3),
+    );
+    return {
+      correctnessScore: correctnessScore,
+      correctness_latency: getLatency(startTime),
+    };
   } catch (error) {
     if (error instanceof GraphqlResponseError) {
       console.log(error.message);
@@ -182,7 +190,10 @@ async function calculate_correctness_metric(
   }
 }
 
-async function calculate_responsiveness_metric(owner: string | undefined, name: string | undefined) {
+async function calculate_responsiveness_metric(
+  owner: string | undefined,
+  name: string | undefined,
+) {
   const startTime = performance.now();
   const query = `
   query {
@@ -361,9 +372,14 @@ function calculate_net_score(
 
 async function main() {
   const { owner, name } = await fetch_repo_info();
-  const { licenseScore, license_latency } = await calculate_license_metric(owner, name);
-  const { responsivenessScore, responsive_latency } = await calculate_responsiveness_metric(owner, name);
-  const { correctnessScore, correctness_latency } = await calculate_correctness_metric(owner, name);
+  const { licenseScore, license_latency } = await calculate_license_metric(
+    owner,
+    name,
+  );
+  const { responsivenessScore, responsive_latency } =
+    await calculate_responsiveness_metric(owner, name);
+  const { correctnessScore, correctness_latency } =
+    await calculate_correctness_metric(owner, name);
   // const { rampupScore, rampup_latency } = await calculate_rampup_metric(owner, name);
   // build ndjson object
   const data = {
@@ -374,9 +390,7 @@ async function main() {
     correctnessScore,
     correctness_latency,
   };
-  const ndjson = [
-    JSON.stringify(data)
-  ].join('\n');
+  const ndjson = [JSON.stringify(data)].join("\n");
   console.log(ndjson);
 }
 
