@@ -7,6 +7,8 @@ import { CorrectnessInterface } from "./interfaces/correctnessinterface";
 import * as git from "isomorphic-git";
 import fs from "fs";
 import http from "isomorphic-git/http/node";
+import axios from "axios";
+import { get } from "http";
 
 const lgplCompatibleSpdxIds: string[] = [
   "LGPL-2.1-only",
@@ -37,58 +39,12 @@ const graphqlWithAuth = graphql.defaults({
   },
 });
 
-// Modify logic if necessary, this is barebones implementation
-function check_license_text(licenseText: string | undefined) {
-  const normalizedText = licenseText?.toLowerCase();
-
-  // List of licenses known to be compatible with LGPL v2.1
-  const compatibleLicenses = [
-    "mit license",
-    "bsd 2-clause license",
-    "bsd 3-clause license",
-    "apache license, version 2.0",
-    "lgpl",
-    "gpl",
-    "mozilla public license",
-    "cc0",
-  ];
-
-  // Check if any compatible license is mentioned
-  const mentionsCompatibleLicense = compatibleLicenses.some((license) =>
-    normalizedText?.includes(license),
-  );
-
-  const permissivePhrases = [
-    "permission is hereby granted, free of charge",
-    "redistribute",
-    "without restriction",
-    "provided that the above copyright notice",
-  ];
-  const containsPermissivePhrases = permissivePhrases.some((phrase) =>
-    normalizedText?.includes(phrase),
-  );
-
-  const incompatiblePhrases = [
-    "not for use in",
-    "not licensed for",
-    "proprietary",
-  ];
-  const containsIncompatiblePhrases = incompatiblePhrases.some((phrase) =>
-    normalizedText?.includes(phrase),
-  );
-
-  return (
-    (mentionsCompatibleLicense || containsPermissivePhrases) &&
-    !containsIncompatiblePhrases
-  );
-}
-
 function getLatency(startTime: number): number {
   return Number(((performance.now() - startTime) / 1000).toFixed(3));
 }
 
-async function fetch_repo_info() {
-  const url = process.argv[2];
+async function fetch_repo_info(url_link: string) {
+  const url = url_link;
   const obj = await url_main(url);
   const owner = obj?.repo_owner;
   const name = obj?.repo_name;
@@ -306,14 +262,14 @@ async function calculate_license_metric(
         url
         description
       }
-      mainLicense: object(expression: "main:LICENSE") {
+      mainpackage: object(expression: "main:package.json") {
         ... on Blob {
-          text
+          json: text
         }
       }
-      masterLicense: object(expression: "master:LICENSE") {
+      masterpackage: object(expression: "master:package.json") {
         ... on Blob {
-          text
+          json: text
         }
       }
     }
@@ -323,28 +279,45 @@ async function calculate_license_metric(
   try {
     const response = await graphqlWithAuth<LicenseInfo>(query);
     const licenseInfo = response.repository.licenseInfo;
-    const licenseText =
-      response.repository.mainLicense?.text ||
-      response.repository.masterLicense?.text;
+    const mainPackageJson = response.repository.mainpackage
+      ? JSON.parse(response.repository.mainpackage.json)
+      : null;
+    const masterPackageJson = response.repository.masterpackage
+      ? JSON.parse(response.repository.masterpackage.json)
+      : null;
+    let packageName;
+    let registryLicenseName;
+    if (mainPackageJson && mainPackageJson.name) {
+      packageName = mainPackageJson.name;
+    } else if (masterPackageJson && masterPackageJson.name) {
+      packageName = masterPackageJson.name;
+    }
     const licenseID = licenseInfo?.spdxId;
     const licenseName = licenseInfo?.name;
 
     let licenseScore = 0;
-    if (licenseInfo == null || licenseID == null) {
-      // No license info found
-      return { License: licenseScore, License_Latency: getLatency(startTime) };
-    }
-
-    if (
-      licenseName === "Other" &&
-      licenseText &&
-      check_license_text(licenseText)
+    if (lgplCompatibleSpdxIds.includes(licenseID)) {
+      licenseScore = 1;
+    } else if (
+      licenseInfo == null ||
+      licenseID == null ||
+      licenseName == "Other"
     ) {
-      licenseScore = 1;
-    } else if (lgplCompatibleSpdxIds.includes(licenseID)) {
-      licenseScore = 1;
+      if (!packageName) {
+        return { License: 0, License_Latency: getLatency(startTime) };
+      }
+      const registry_link = `https://registry.npmjs.org/${packageName}`;
+      const registryResponse = await axios.get(registry_link);
+      registryLicenseName = registryResponse.data.license;
+      if (
+        typeof registryLicenseName === "string" &&
+        lgplCompatibleSpdxIds.includes(registryLicenseName)
+      ) {
+        licenseScore = 1;
+      } else {
+        licenseScore = 0;
+      }
     }
-
     return { License: licenseScore, License_Latency: getLatency(startTime) };
   } catch (error) {
     if (error instanceof GraphqlResponseError) {
@@ -362,36 +335,65 @@ function calculate_net_score(
   correctnessScore: number,
   responsiveMaintenanceScore: number,
 ) {
-  return (
-    0.25 * licenseScore +
-    0.25 * rampupScore +
-    0.25 * correctnessScore +
-    0.25 * responsiveMaintenanceScore
-  );
+  const startTime = performance.now();
+  return {
+    NetScore:
+      0.25 * licenseScore +
+      0.25 * rampupScore +
+      0.25 * correctnessScore +
+      0.25 * responsiveMaintenanceScore,
+    NetScore_Latency: getLatency(startTime),
+  };
 }
 
 async function main() {
-  const { owner, name } = await fetch_repo_info();
-  const { License, License_Latency } = await calculate_license_metric(
-    owner,
-    name,
-  );
-  const { ResponsiveMaintainer, ResponsiveMaintainer_Latency } =
-    await calculate_responsiveness_metric(owner, name);
-  const { Correctness, Correctness_Latency } =
-    await calculate_correctness_metric(owner, name);
-  // const { RampUp, RampUp_Latency } = await calculate_rampup_metric(owner, name);
-  // build ndjson object
-  const data = {
-    License,
-    License_Latency,
-    ResponsiveMaintainer,
-    ResponsiveMaintainer_Latency,
-    Correctness,
-    Correctness_Latency,
-  };
-  const ndjson = [JSON.stringify(data)].join("\n");
-  console.log(ndjson);
+  try {
+    const url_file = process.argv[2];
+    // open the file
+    const url_data = fs.readFileSync(url_file, "utf8");
+    // parse line by line
+    const urls = url_data.split("\n").map((url) => url.trim());
+    let ndjson_data = [];
+    // iterate over each url
+    for (const url of urls) {
+      const { owner, name } = await fetch_repo_info(url);
+      const { License, License_Latency } = await calculate_license_metric(
+        owner,
+        name,
+      );
+      const { ResponsiveMaintainer, ResponsiveMaintainer_Latency } =
+        await calculate_responsiveness_metric(owner, name);
+      const { Correctness, Correctness_Latency } =
+        await calculate_correctness_metric(owner, name);
+      // const { RampUp, RampUp_Latency } = await calculate_rampup_metric(owner, name);
+      // build ndjson object
+      const data = {
+        URL: url,
+        NetScore: -1,
+        NetScore_Latency: -1,
+        RampUp: -1,
+        RampUp_Latency: -1,
+        Correctness,
+        Correctness_Latency,
+        BusFactor: -1,
+        BusFactor_Latency: -1,
+        ResponsiveMaintainer,
+        ResponsiveMaintainer_Latency,
+        License,
+        License_Latency,
+      };
+
+      const json = JSON.stringify(data);
+      // push to ndjson array
+      ndjson_data.push(json);
+    }
+    const ndjson_output = ndjson_data.join("\n");
+    console.log(ndjson_output);
+    process.exit(0);
+  } catch (error) {
+    console.error("An error occured:", error);
+    process.exit(1);
+  }
 }
 
 if (require.main === module) {

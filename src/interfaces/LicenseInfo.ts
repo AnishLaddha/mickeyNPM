@@ -6,11 +6,11 @@ export interface LicenseInfo {
       url: string;
       description: string;
     };
-    mainLicense: {
-      text: string;
+    mainpackage: {
+      json: any;
     } | null;
-    masterLicense: {
-      text: string;
+    masterpackage: {
+      json: any;
     } | null;
   };
 }

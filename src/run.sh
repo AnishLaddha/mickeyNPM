@@ -19,10 +19,13 @@ case "$1" in
     echo "Done."
     ;;
   *)
-    if [[ "$1" == *"npmjs.com"* || "$1" == *"github.com"* ]]; then
-      echo "Calculating metrics for the provided package URL..."
+    if [[ "$1" == *".txt"* ]]; then
       npx tsx calculate_metrics "$1"
-      echo "Done."
+      rc=$?
+      if [ $rc -ne 0 ]; then
+        echo "Error calculating metrics."
+        exit $rc
+      fi
     else
       echo "Invalid argument. Please provide 'install', 'test', or a valid npmjs or GitHub URL."
       exit 1
