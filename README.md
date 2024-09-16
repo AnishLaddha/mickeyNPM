@@ -52,7 +52,8 @@ To run the code and measure the ramp-up time for a repository, follow these step
    ./run URL_FILE
    ```
 
-   Replace [`URL_FILE`] with the URL of the GitHub repository you want to analyze.
+   Replace [`URL_FILE`] with the absolute path of the file containg the URL's you
+   want metrics on
 
 5. To run the test suite, use:
 
@@ -64,10 +65,22 @@ To run the code and measure the ramp-up time for a repository, follow these step
 
 Here's an example of how to run this:
 
-```sh
+````sh
 ./run install
 Installing dependencies...
 Done.
 
-./run https://github.com/octocat/Hello-World
+./run ./url_files/SampleUrlFile.txt
+```json
+{"URL":"https://github.com/cloudinary/cloudinary_npm","NetScore":-1,"NetScore_Latency":-1,"RampUp":-1,"RampUp_Latency":-1,"Correctness":0.675,"Correctness_Latency":0.633,"BusFactor":-1,"BusFactor_Latency":-1,"ResponsiveMaintainer":0.3,"ResponsiveMaintainer_Latency":0.412,"License":1,"License_Latency":0.414}
+{"URL":"https://www.npmjs.com/package/express","NetScore":-1,"NetScore_Latency":-1,"RampUp":-1,"RampUp_Latency":-1,"Correctness":0.894,"Correctness_Latency":0.372,"BusFactor":-1,"BusFactor_Latency":-1,"ResponsiveMaintainer":0.3,"ResponsiveMaintainer_Latency":0.473,"License":1,"License_Latency":0.199}
+{"URL":"https://github.com/nullivex/nodist","NetScore":-1,"NetScore_Latency":-1,"RampUp":-1,"RampUp_Latency":-1,"Correctness":0.569,"Correctness_Latency":0.458,"BusFactor":-1,"BusFactor_Latency":-1,"ResponsiveMaintainer":0.3,"ResponsiveMaintainer_Latency":0.509,"License":1,"License_Latency":0.176}
+{"URL":"https://github.com/lodash/lodash","NetScore":-1,"NetScore_Latency":-1,"RampUp":-1,"RampUp_Latency":-1,"Correctness":0.345,"Correctness_Latency":0.246,"BusFactor":-1,"BusFactor_Latency":-1,"ResponsiveMaintainer":0.7,"ResponsiveMaintainer_Latency":0.51,"License":1,"License_Latency":0.244}
+{"URL":"https://www.npmjs.com/package/browserify","NetScore":-1,"NetScore_Latency":-1,"RampUp":-1,"RampUp_Latency":-1,"Correctness":0.349,"Correctness_Latency":0.473,"BusFactor":-1,"BusFactor_Latency":-1,"ResponsiveMaintainer":0.3,"ResponsiveMaintainer_Latency":0.578,"License":1,"License_Latency":0.165}
+````
+
+Done.
+
+```
+
 ```
