@@ -65,7 +65,7 @@ To run the code and measure the ramp-up time for a repository, follow these step
 
 Here's an example of how to run this:
 
-````sh
+```sh
 ./run install
 Installing dependencies...
 Done.
@@ -78,5 +78,4 @@ Done.
 {"URL":"https://www.npmjs.com/package/browserify","NetScore":-1,"NetScore_Latency":-1,"RampUp":-1,"RampUp_Latency":-1,"Correctness":0.349,"Correctness_Latency":0.473,"BusFactor":-1,"BusFactor_Latency":-1,"ResponsiveMaintainer":0.3,"ResponsiveMaintainer_Latency":0.578,"License":1,"License_Latency":0.165}
 
 Done.
-
 ```
