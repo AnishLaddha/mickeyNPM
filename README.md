@@ -67,8 +67,7 @@ Here's an example of how to run this:
 
 ```sh
 ./run install
-Installing dependencies...
-Done.
+10 dependencies installed...
 
 ./run ./url_files/SampleUrlFile.txt
 {"URL":"https://github.com/cloudinary/cloudinary_npm","NetScore":-1,"NetScore_Latency":-1,"RampUp":-1,"RampUp_Latency":-1,"Correctness":0.675,"Correctness_Latency":0.633,"BusFactor":-1,"BusFactor_Latency":-1,"ResponsiveMaintainer":0.3,"ResponsiveMaintainer_Latency":0.412,"License":1,"License_Latency":0.414}
@@ -77,5 +76,9 @@ Done.
 {"URL":"https://github.com/lodash/lodash","NetScore":-1,"NetScore_Latency":-1,"RampUp":-1,"RampUp_Latency":-1,"Correctness":0.345,"Correctness_Latency":0.246,"BusFactor":-1,"BusFactor_Latency":-1,"ResponsiveMaintainer":0.7,"ResponsiveMaintainer_Latency":0.51,"License":1,"License_Latency":0.244}
 {"URL":"https://www.npmjs.com/package/browserify","NetScore":-1,"NetScore_Latency":-1,"RampUp":-1,"RampUp_Latency":-1,"Correctness":0.349,"Correctness_Latency":0.473,"BusFactor":-1,"BusFactor_Latency":-1,"ResponsiveMaintainer":0.3,"ResponsiveMaintainer_Latency":0.578,"License":1,"License_Latency":0.165}
 
-Done.
+./run test
+Total: 10
+Passed: 9
+Coverage: 90%
+9/10 test cases passed. 90% line coverage achieved.
 ```

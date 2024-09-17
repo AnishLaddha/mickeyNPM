@@ -33,6 +33,8 @@ const lgplCompatibleSpdxIds: string[] = [
 // Provide path to env file here
 dotenv.config({ path: "../../githubapi.env" });
 const githubToken = process.env.GITHUB_TOKEN;
+const loglevel = process.env.LOG_LEVEL;
+const logfile = process.env.LOG_FILE;
 const graphqlWithAuth = graphql.defaults({
   headers: {
     authorization: `token ${githubToken}`,
@@ -43,7 +45,7 @@ function getLatency(startTime: number): number {
   return Number(((performance.now() - startTime) / 1000).toFixed(3));
 }
 
-async function fetch_repo_info(url_link: string) {
+export async function fetch_repo_info(url_link: string) {
   const url = url_link;
   const obj = await url_main(url);
   const owner = obj?.repo_owner;
@@ -52,7 +54,7 @@ async function fetch_repo_info(url_link: string) {
   return { owner, name };
 }
 
-async function calculate_rampup_metric(
+export async function calculate_rampup_metric(
   owner: string | undefined,
   name: string | undefined,
 ) {
@@ -68,7 +70,18 @@ async function calculate_rampup_metric(
   });
   //perform analysis on the cloned repo for rampup time
   // Measure the time from when a developer first forks or clones the repository to when they submit their first pull request.
-
+  // For this, we need to check the commits and PRs in the cloned repo. WE CANT USE THE GITHUB API FOR THIS
+  // get all the commits
+  // const commits = await git.log({
+  //   fs,
+  //   dir: `./repos/${name}`,
+  //   depth: 100,
+  // });
+  // // get all the pull requests
+  // const prs = await git.listBranches({
+  //   fs,
+  //   dir: `./repos/${name}`,
+  // });
   // delete the cloned repo
   fs.rm(`./repos/${name}`, { recursive: true }, (err) => {
     if (err) {
@@ -79,7 +92,7 @@ async function calculate_rampup_metric(
   return { rampupScore: 0, rampup_latency: getLatency(startTime) };
 }
 
-async function calculate_correctness_metric(
+export async function calculate_correctness_metric(
   owner: string | undefined,
   name: string | undefined,
 ) {
@@ -146,7 +159,7 @@ async function calculate_correctness_metric(
   }
 }
 
-async function calculate_responsiveness_metric(
+export async function calculate_responsiveness_metric(
   owner: string | undefined,
   name: string | undefined,
 ) {
@@ -190,11 +203,11 @@ async function calculate_responsiveness_metric(
       if (pr.node.closedAt || pr.node.mergedAt) {
         const createdAt = pr.node.createdAt
           ? new Date(pr.node.createdAt).getTime()
-          : 0; //if undefined
+          : 0;
         const closedOrMergedAt =
           pr.node.closedAt || pr.node.mergedAt
             ? new Date(pr.node.closedAt || pr.node.mergedAt).getTime()
-            : 0; //if undefined!
+            : 0;
 
         totalPrResponseTime += closedOrMergedAt - createdAt;
         resolvedPrs++;
@@ -248,7 +261,7 @@ async function calculate_responsiveness_metric(
   }
 }
 
-async function calculate_license_metric(
+export async function calculate_license_metric(
   owner: string | undefined,
   name: string | undefined,
 ) {
@@ -329,7 +342,7 @@ async function calculate_license_metric(
   }
 }
 
-function calculate_net_score(
+export function calculate_net_score(
   licenseScore: number,
   rampupScore: number,
   correctnessScore: number,
@@ -357,14 +370,15 @@ async function main() {
     // iterate over each url
     for (const url of urls) {
       const { owner, name } = await fetch_repo_info(url);
-      const { License, License_Latency } = await calculate_license_metric(
-        owner,
-        name,
-      );
-      const { ResponsiveMaintainer, ResponsiveMaintainer_Latency } =
-        await calculate_responsiveness_metric(owner, name);
-      const { Correctness, Correctness_Latency } =
-        await calculate_correctness_metric(owner, name);
+      const [
+        { License, License_Latency },
+        { ResponsiveMaintainer, ResponsiveMaintainer_Latency },
+        { Correctness, Correctness_Latency },
+      ] = await Promise.all([
+        calculate_license_metric(owner, name),
+        calculate_responsiveness_metric(owner, name),
+        calculate_correctness_metric(owner, name),
+      ]);
       // const { RampUp, RampUp_Latency } = await calculate_rampup_metric(owner, name);
       // build ndjson object
       const data = {

@@ -9,9 +9,9 @@ fi
 # Handle different argument values
 case "$1" in
   install)
-    echo "Installing dependencies..."
-    npm i
-    echo "Done."
+    npm i --silent
+    num_dependencies=$(npm list --depth=0 | grep '├──' | wc -l)
+    echo "$num_dependencies dependencies installed..."
     ;;
   test)
     echo "Running tests..."
