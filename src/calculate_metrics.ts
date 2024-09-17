@@ -1,14 +1,15 @@
 import { graphql, GraphqlResponseError } from "@octokit/graphql";
-import * as dotenv from "dotenv";
 import { url_main } from "./url_handler";
 import { LicenseInfo } from "./interfaces/LicenseInfo";
 import { RepositoryResponse } from "./interfaces/RepositoryResponse";
 import { CorrectnessInterface } from "./interfaces/correctnessinterface";
+import { get } from "http";
+import * as dotenv from "dotenv";
 import * as git from "isomorphic-git";
 import fs from "fs";
 import http from "isomorphic-git/http/node";
 import axios from "axios";
-import { get } from "http";
+import * as path from "path";
 
 const lgplCompatibleSpdxIds: string[] = [
   "LGPL-2.1-only",
@@ -31,10 +32,12 @@ const lgplCompatibleSpdxIds: string[] = [
 ];
 
 // Provide path to env file here
-dotenv.config({ path: "../../githubapi.env" });
+const envPath = path.resolve(__dirname, "../project.env");
+dotenv.config({ path: envPath });
 const githubToken = process.env.GITHUB_TOKEN;
 const loglevel = process.env.LOG_LEVEL;
 const logfile = process.env.LOG_FILE;
+
 const graphqlWithAuth = graphql.defaults({
   headers: {
     authorization: `token ${githubToken}`,

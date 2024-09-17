@@ -20,7 +20,7 @@ case "$1" in
     ;;
   *)
     if [[ "$1" == *".txt"* ]]; then
-      npx tsx calculate_metrics "$1"
+      npx tsx src/calculate_metrics "$1"
       rc=$?
       if [ $rc -ne 0 ]; then
         echo "Error calculating metrics."
