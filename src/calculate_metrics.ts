@@ -25,17 +25,17 @@ const lgplCompatibleSpdxIds: string[] = [
   "GPL-2.0-or-later",
   "GPL-3.0-only",
   "GPL-3.0-or-later",
-  "LGPL-3.0-only",
-  "LGPL-3.0-or-later",
   "MPL-2.0",
   "Unlicense",
   "CC0-1.0",
 ];
 
 // Provide path to env file here
-const envPath = path.resolve(__dirname, "../project.env");
-dotenv.config({ path: envPath });
+console.log(process.env);
 const githubToken = process.env.GITHUB_TOKEN;
+if (!githubToken) {
+  throw new Error("GITHUB_TOKEN is required");
+}
 const loglevel = Number(process.env.LOG_LEVEL);
 const logfile = process.env.LOG_FILE;
 
@@ -73,7 +73,6 @@ export async function fetch_repo_info(
   const obj = await url_main(url);
   const owner = obj?.repo_owner;
   const name = obj?.repo_name;
-
   logger?.debug(`Using URL Handler, fetched Owner: ${owner}, Name: ${name}`);
   return { owner, name };
 }
@@ -81,29 +80,35 @@ export async function fetch_repo_info(
 export async function calculate_rampup_metric(
   owner: string | undefined,
   name: string | undefined,
-): Promise<{ rampupScore: number; rampup_latency: number }> {
+): Promise<{ RampUp: number; RampUp_Latency: number }> {
   // use isomorphic-git to clone the repo
   logger?.info(`Calculating ramp-up metric for ${owner}/${name}`);
   const startTime = performance.now();
   logger?.debug(`Cloning repository https://github.com/${owner}/${name}.git`);
-  await git.clone({
-    fs,
-    http,
-    dir: "./repos/" + name,
-    url: `https://github.com/${owner}/${name}.git`,
-    singleBranch: true,
-    depth: 1,
-  });
-  logger?.debug(`Repository cloned successfully`);
+  try {
+    await git.clone({
+      fs,
+      http,
+      dir: "./src/repos/" + name,
+      url: `https://github.com/${owner}/${name}.git`,
+      singleBranch: true,
+      depth: 100,
+      noCheckout: true, //handles symbolic links
+    });
+    logger?.info(`Successfully cloned ${owner}/${name}`);
+  } catch (error) {
+    logger?.error(`Failed to clone ${owner}/${name}: ${error}`);
+  }
   //perform analysis on the cloned repo for rampup time
   // Measure the time from when a developer first forks or clones the repository to when they submit their first pull request.
   // For this, we need to check the commits and PRs in the cloned repo. WE CANT USE THE GITHUB API FOR THIS
   // get all the commits
   // const commits = await git.log({
   //   fs,
-  //   dir: `./repos/${name}`,
-  //   depth: 100,
+  //   dir: `./src/repos/${name}`,
+  //   depth: 5,
   // });
+  // console.log(commits.length);
   // // get all the pull requests
   // const prs = await git.listBranches({
   //   fs,
@@ -111,13 +116,13 @@ export async function calculate_rampup_metric(
   // });
   // delete the cloned repo
   logger?.debug("Deleting cloned repository");
-  fs.rm(`./repos/${name}`, { recursive: true }, (err) => {
+  fs.rm(`./src/repos/${name}`, { recursive: true }, (err) => {
     if (err) {
       logger?.error(err);
     }
   });
   logger?.info(`Ramp-up metric calculation completed for ${owner}/${name}`);
-  return { rampupScore: 0, rampup_latency: getLatency(startTime) };
+  return { RampUp: -1, RampUp_Latency: -1 };
 }
 
 export async function calculate_correctness_metric(
@@ -187,7 +192,7 @@ export async function calculate_correctness_metric(
     } else {
       logger?.error(error);
     }
-    return { Correctness: 0, Correctness_Latency: 0 };
+    return { Correctness: 0, Correctness_Latency: getLatency(startTime) };
   }
 }
 
@@ -297,7 +302,10 @@ export async function calculate_responsiveness_metric(
     };
   } catch (error) {
     logger?.error(error);
-    return { ResponsiveMaintainer: 0, ResponsiveMaintainer_Latency: 0 };
+    return {
+      ResponsiveMaintainer: 0,
+      ResponsiveMaintainer_Latency: getLatency(startTime),
+    };
   }
 }
 
@@ -352,7 +360,7 @@ export async function calculate_license_metric(
 
     let licenseScore = 0;
     if (lgplCompatibleSpdxIds.includes(licenseID)) {
-      logger?.info(`License is compatible with LGPL V2.1: ${licenseID}`);
+      logger?.info(`${licenseID} license is compatible with LGPL V2.1`);
       licenseScore = 1;
     } else if (
       licenseInfo == null ||
@@ -374,11 +382,11 @@ export async function calculate_license_metric(
       ) {
         licenseScore = 1;
         logger?.info(
-          `License is compatible with LGPL V2.1: ${registryLicenseName}`,
+          `${registryLicenseName} license is compatible with LGPL V2.1`,
         );
       } else {
         logger?.info(
-          `License is not compatible with LGPL V2.1: ${registryLicenseName}`,
+          `${registryLicenseName} license is not compatible with LGPL V2.1`,
         );
         licenseScore = 0;
       }
@@ -390,7 +398,7 @@ export async function calculate_license_metric(
     } else {
       logger?.error(error);
     }
-    return { License: 0, License_Latency: 0 };
+    return { License: 0, License_Latency: getLatency(startTime) };
   }
 }
 
@@ -403,10 +411,10 @@ export function calculate_net_score(
   const startTime = performance.now();
   return {
     NetScore:
-      0.25 * licenseScore +
-      0.25 * rampupScore +
+      0.3 * licenseScore +
+      0.2 * rampupScore +
       0.25 * correctnessScore +
-      0.25 * responsiveMaintenanceScore,
+      0.2 * responsiveMaintenanceScore,
     NetScore_Latency: getLatency(startTime),
   };
 }
@@ -424,39 +432,54 @@ async function main() {
     let ndjson_data = [];
     // iterate over each url
     for (const url of urls) {
-      logger?.info(`Calculating metrics for ${url}`);
-      const { owner, name } = await fetch_repo_info(url);
-      logger?.debug(`Owner: ${owner}, Name: ${name}`);
-      const [
-        { License, License_Latency },
-        { ResponsiveMaintainer, ResponsiveMaintainer_Latency },
-        { Correctness, Correctness_Latency },
-      ] = await Promise.all([
-        calculate_license_metric(owner, name),
-        calculate_responsiveness_metric(owner, name),
-        calculate_correctness_metric(owner, name),
-      ]);
-      // const { RampUp, RampUp_Latency } = await calculate_rampup_metric(owner, name);
-      // build ndjson object
-      const data = {
-        URL: url,
-        NetScore: -1,
-        NetScore_Latency: -1,
-        RampUp: -1,
-        RampUp_Latency: -1,
-        Correctness,
-        Correctness_Latency,
-        BusFactor: -1,
-        BusFactor_Latency: -1,
-        ResponsiveMaintainer,
-        ResponsiveMaintainer_Latency,
-        License,
-        License_Latency,
-      };
-      const json = JSON.stringify(data);
-      // push to ndjson array
-      ndjson_data.push(json);
-      logger?.info(`Metrics calculated for ${url}`);
+      if (url != "") {
+        logger?.info(`Calculating metrics for ${url}`);
+        const { owner, name } = await fetch_repo_info(url);
+        logger?.debug(`Owner: ${owner}, Name: ${name}`);
+
+        // Calculate metrics concurrently
+        const [
+          { License, License_Latency },
+          { ResponsiveMaintainer, ResponsiveMaintainer_Latency },
+          { Correctness, Correctness_Latency },
+          { RampUp, RampUp_Latency },
+        ] = await Promise.all([
+          calculate_license_metric(owner, name),
+          calculate_responsiveness_metric(owner, name),
+          calculate_correctness_metric(owner, name),
+          calculate_rampup_metric(owner, name),
+        ]);
+
+        let { NetScore, NetScore_Latency } = calculate_net_score(
+          License,
+          RampUp,
+          Correctness,
+          ResponsiveMaintainer,
+        );
+        NetScore = Number(NetScore.toFixed(3));
+
+        // build ndjson object
+        const data = {
+          URL: url,
+          NetScore,
+          NetScore_Latency,
+          RampUp,
+          RampUp_Latency,
+          Correctness,
+          Correctness_Latency,
+          BusFactor: -1,
+          BusFactor_Latency: -1,
+          ResponsiveMaintainer,
+          ResponsiveMaintainer_Latency,
+          License,
+          License_Latency,
+        };
+
+        const json = JSON.stringify(data);
+        // push to ndjson array
+        ndjson_data.push(json);
+        logger?.info(`Metrics calculated for ${url}`);
+      }
     }
     const ndjson_output = ndjson_data.join("\n");
     logger?.debug(`NDJSON output: ${ndjson_output}`);
