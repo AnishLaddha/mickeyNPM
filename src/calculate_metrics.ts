@@ -10,6 +10,7 @@ import fs from "fs";
 import http from "isomorphic-git/http/node";
 import axios from "axios";
 import * as path from "path";
+import winston from "winston";
 
 const lgplCompatibleSpdxIds: string[] = [
   "LGPL-2.1-only",
@@ -35,7 +36,7 @@ const lgplCompatibleSpdxIds: string[] = [
 const envPath = path.resolve(__dirname, "../project.env");
 dotenv.config({ path: envPath });
 const githubToken = process.env.GITHUB_TOKEN;
-const loglevel = process.env.LOG_LEVEL;
+const loglevel = Number(process.env.LOG_LEVEL);
 const logfile = process.env.LOG_FILE;
 
 const graphqlWithAuth = graphql.defaults({
@@ -44,16 +45,34 @@ const graphqlWithAuth = graphql.defaults({
   },
 });
 
+let logger: winston.Logger | undefined;
+// Create a logger
+if (loglevel && logfile) {
+  logger = winston.createLogger({
+    // level is set to 'info' if loglevel is 1, and 'debug' if loglevel is 2
+    level: loglevel == 1 ? "info" : "debug",
+    format: winston.format.combine(
+      winston.format.timestamp(),
+      winston.format.json()
+    ),
+    transports: [new winston.transports.File({ filename: logfile })],
+  });
+}
+// when you are trying to make a debug message, you can use the logger.debug() function
+// when you are trying to make an info message, you can use the logger.info() function
+
 function getLatency(startTime: number): number {
   return Number(((performance.now() - startTime) / 1000).toFixed(3));
 }
 
 export async function fetch_repo_info(url_link: string) {
   const url = url_link;
+  logger?.info(`Fetching owner and repository name for: ${url}`);
   const obj = await url_main(url);
   const owner = obj?.repo_owner;
   const name = obj?.repo_name;
 
+  logger?.debug(`Using URL Handler, fetched Owner: ${owner}, Name: ${name}`);
   return { owner, name };
 }
 
@@ -62,7 +81,9 @@ export async function calculate_rampup_metric(
   name: string | undefined,
 ) {
   // use isomorphic-git to clone the repo
+  logger?.info(`Calculating ramp-up metric for ${owner}/${name}`);
   const startTime = performance.now();
+  logger?.debug(`Cloning repository https://github.com/${owner}/${name}.git`);
   await git.clone({
     fs,
     http,
@@ -71,6 +92,7 @@ export async function calculate_rampup_metric(
     singleBranch: true,
     depth: 1,
   });
+  logger?.debug(`Repository cloned successfully`);
   //perform analysis on the cloned repo for rampup time
   // Measure the time from when a developer first forks or clones the repository to when they submit their first pull request.
   // For this, we need to check the commits and PRs in the cloned repo. WE CANT USE THE GITHUB API FOR THIS
@@ -86,12 +108,13 @@ export async function calculate_rampup_metric(
   //   dir: `./repos/${name}`,
   // });
   // delete the cloned repo
+  logger?.debug("Deleting cloned repository");
   fs.rm(`./repos/${name}`, { recursive: true }, (err) => {
     if (err) {
-      console.error(err);
+      logger?.error(err);
     }
   });
-
+  logger?.info(`Ramp-up metric calculation completed for ${owner}/${name}`);
   return { rampupScore: 0, rampup_latency: getLatency(startTime) };
 }
 
@@ -99,6 +122,7 @@ export async function calculate_correctness_metric(
   owner: string | undefined,
   name: string | undefined,
 ) {
+  logger?.info(`Calculating correctness metric for ${owner}/${name}`);
   const startTime = performance.now();
   const query = `
   query {
@@ -127,8 +151,10 @@ export async function calculate_correctness_metric(
     }
   }
   `;
+  logger?.debug(`Query: ${query}`);
   try {
     const response = await graphqlWithAuth<CorrectnessInterface>(query);
+    logger?.info("Correctness GraphQL response successful");
     const repo = response.repository;
     const openIssues = repo.issues.totalCount;
     const closedIssues = repo.closedIssues.totalCount;
@@ -148,15 +174,16 @@ export async function calculate_correctness_metric(
         Math.min((issueRatio + prRatio + recentCommitRatio) / 3),
       ).toFixed(3),
     );
+    logger?.info(`Correctness score calculated: ${correctnessScore}`);
     return {
       Correctness: correctnessScore,
       Correctness_Latency: getLatency(startTime),
     };
   } catch (error) {
     if (error instanceof GraphqlResponseError) {
-      console.log(error.message);
+      logger?.error(error.message);
     } else {
-      console.log(error);
+      logger?.error(error);
     }
     return { licenseScore: 0, license_latency: 0 };
   }
@@ -166,6 +193,7 @@ export async function calculate_responsiveness_metric(
   owner: string | undefined,
   name: string | undefined,
 ) {
+  logger?.info(`Calculating responsiveness metric for ${owner}/${name}`);
   const startTime = performance.now();
   const query = `
   query {
@@ -192,9 +220,10 @@ export async function calculate_responsiveness_metric(
     }
   }
   `;
-
+  logger?.debug(`Query: ${query}`);
   try {
     const response = await graphqlWithAuth<RepositoryResponse>(query);
+    logger?.info("Responsiveness GraphQL response successful");
     const pullRequests = response.repository.pullRequests.edges;
     const issues = response.repository.issues.edges;
 
@@ -236,6 +265,8 @@ export async function calculate_responsiveness_metric(
     const avgIssueResponseTime =
       resolvedIssues > 0 ? totalIssueResponseTime / resolvedIssues : Infinity;
 
+    logger?.debug(`Average PR response time: ${avgPrResponseTime} ms`);
+    logger?.debug(`Average Issue response time: ${avgIssueResponseTime} ms`);
     // responsiveness score
     let responsivenessScore = 0;
 
@@ -253,13 +284,14 @@ export async function calculate_responsiveness_metric(
     } else {
       responsivenessScore = 0.3;
     }
+    logger?.info(`Responsiveness score calculated: ${responsivenessScore}`);
 
     return {
       ResponsiveMaintainer: responsivenessScore,
       ResponsiveMaintainer_Latency: getLatency(startTime),
     };
   } catch (error) {
-    console.error("Error fetching repository data:", error);
+    logger?.error(error);
     return { responsivenessScore: 0, responsive_latency: 0 };
   }
 }
@@ -268,6 +300,7 @@ export async function calculate_license_metric(
   owner: string | undefined,
   name: string | undefined,
 ) {
+  logger?.info(`Calculating license metric for ${owner}/${name}`);
   const startTime = performance.now();
   const query = `
   query {
@@ -291,9 +324,10 @@ export async function calculate_license_metric(
     }
   }
   `;
-
+  logger?.debug(`Query: ${query}`);
   try {
     const response = await graphqlWithAuth<LicenseInfo>(query);
+    logger?.info("License GraphQL response successful");
     const licenseInfo = response.repository.licenseInfo;
     const mainPackageJson = response.repository.mainpackage
       ? JSON.parse(response.repository.mainpackage.json)
@@ -313,6 +347,7 @@ export async function calculate_license_metric(
 
     let licenseScore = 0;
     if (lgplCompatibleSpdxIds.includes(licenseID)) {
+      logger?.info(`License is compatible with LGPL V2.1: ${licenseID}`);
       licenseScore = 1;
     } else if (
       licenseInfo == null ||
@@ -320,9 +355,12 @@ export async function calculate_license_metric(
       licenseName == "Other"
     ) {
       if (!packageName) {
+        logger?.info("No package.json found, unable to determine license");
         return { License: 0, License_Latency: getLatency(startTime) };
       }
+      logger?.info("Checking license from registry");
       const registry_link = `https://registry.npmjs.org/${packageName}`;
+      logger?.debug(`Fetching license from registry: ${registry_link}...`);
       const registryResponse = await axios.get(registry_link);
       registryLicenseName = registryResponse.data.license;
       if (
@@ -330,16 +368,18 @@ export async function calculate_license_metric(
         lgplCompatibleSpdxIds.includes(registryLicenseName)
       ) {
         licenseScore = 1;
+        logger?.info(`License is compatible with LGPL V2.1: ${registryLicenseName}`);
       } else {
+        logger?.info(`License is not compatible with LGPL V2.1: ${registryLicenseName}`);
         licenseScore = 0;
       }
     }
     return { License: licenseScore, License_Latency: getLatency(startTime) };
   } catch (error) {
     if (error instanceof GraphqlResponseError) {
-      console.log(error.message);
+      logger?.error(error.message);
     } else {
-      console.log(error);
+      logger?.error(error);
     }
     return { License: 0, License_Latency: 0 };
   }
@@ -364,15 +404,20 @@ export function calculate_net_score(
 
 async function main() {
   try {
+    logger?.info("Starting metric calculation");
     const url_file = process.argv[2];
     // open the file
+    logger?.info(`Reading URLs from file: ${url_file}`);
     const url_data = fs.readFileSync(url_file, "utf8");
     // parse line by line
     const urls = url_data.split("\n").map((url) => url.trim());
+    logger?.info(`Read ${urls.length} URLs from file`);
     let ndjson_data = [];
     // iterate over each url
     for (const url of urls) {
+      logger?.info(`Calculating metrics for ${url}`);
       const { owner, name } = await fetch_repo_info(url);
+      logger?.debug(`Owner: ${owner}, Name: ${name}`);
       const [
         { License, License_Latency },
         { ResponsiveMaintainer, ResponsiveMaintainer_Latency },
@@ -399,17 +444,23 @@ async function main() {
         License,
         License_Latency,
       };
-
       const json = JSON.stringify(data);
       // push to ndjson array
       ndjson_data.push(json);
+      logger?.info(`Metrics calculated for ${url}`);
     }
     const ndjson_output = ndjson_data.join("\n");
+    logger?.debug(`NDJSON output: ${ndjson_output}`);
     console.log(ndjson_output);
-    process.exit(0);
+    logger?.info("Metrics calculation completed. Exiting...");
+    setTimeout(() => {
+      process.exit(0);
+    }, 1000);
   } catch (error) {
-    console.error("An error occured:", error);
-    process.exit(1);
+    logger?.error(error);
+    setTimeout(() => {
+      process.exit(1);
+    }, 1000);
   }
 }
 
