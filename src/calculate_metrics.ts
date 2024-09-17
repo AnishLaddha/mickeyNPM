@@ -31,13 +31,18 @@ const lgplCompatibleSpdxIds: string[] = [
 ];
 
 // Provide path to env file here
-console.log(process.env);
+dotenv.config();
 const githubToken = process.env.GITHUB_TOKEN;
 if (!githubToken) {
   throw new Error("GITHUB_TOKEN is required");
 }
 const loglevel = Number(process.env.LOG_LEVEL);
-const logfile = process.env.LOG_FILE;
+let logfile = process.env.LOG_FILE;
+// format the logfile path correctly
+if (logfile) {
+  logfile = path.resolve(logfile);
+}
+console.log(logfile, loglevel);
 
 const graphqlWithAuth = graphql.defaults({
   headers: {
