@@ -53,7 +53,7 @@ if (loglevel && logfile) {
     level: loglevel == 1 ? "info" : "debug",
     format: winston.format.combine(
       winston.format.timestamp(),
-      winston.format.json()
+      winston.format.json(),
     ),
     transports: [new winston.transports.File({ filename: logfile })],
   });
@@ -65,7 +65,9 @@ function getLatency(startTime: number): number {
   return Number(((performance.now() - startTime) / 1000).toFixed(3));
 }
 
-export async function fetch_repo_info(url_link: string) {
+export async function fetch_repo_info(
+  url_link: string,
+): Promise<{ owner: string | undefined; name: string | undefined }> {
   const url = url_link;
   logger?.info(`Fetching owner and repository name for: ${url}`);
   const obj = await url_main(url);
@@ -79,7 +81,7 @@ export async function fetch_repo_info(url_link: string) {
 export async function calculate_rampup_metric(
   owner: string | undefined,
   name: string | undefined,
-) {
+): Promise<{ rampupScore: number; rampup_latency: number }> {
   // use isomorphic-git to clone the repo
   logger?.info(`Calculating ramp-up metric for ${owner}/${name}`);
   const startTime = performance.now();
@@ -121,7 +123,7 @@ export async function calculate_rampup_metric(
 export async function calculate_correctness_metric(
   owner: string | undefined,
   name: string | undefined,
-) {
+): Promise<{ Correctness: number; Correctness_Latency: number }> {
   logger?.info(`Calculating correctness metric for ${owner}/${name}`);
   const startTime = performance.now();
   const query = `
@@ -185,14 +187,17 @@ export async function calculate_correctness_metric(
     } else {
       logger?.error(error);
     }
-    return { licenseScore: 0, license_latency: 0 };
+    return { Correctness: 0, Correctness_Latency: 0 };
   }
 }
 
 export async function calculate_responsiveness_metric(
   owner: string | undefined,
   name: string | undefined,
-) {
+): Promise<{
+  ResponsiveMaintainer: number;
+  ResponsiveMaintainer_Latency: number;
+}> {
   logger?.info(`Calculating responsiveness metric for ${owner}/${name}`);
   const startTime = performance.now();
   const query = `
@@ -292,14 +297,14 @@ export async function calculate_responsiveness_metric(
     };
   } catch (error) {
     logger?.error(error);
-    return { responsivenessScore: 0, responsive_latency: 0 };
+    return { ResponsiveMaintainer: 0, ResponsiveMaintainer_Latency: 0 };
   }
 }
 
 export async function calculate_license_metric(
   owner: string | undefined,
   name: string | undefined,
-) {
+): Promise<{ License: number; License_Latency: number }> {
   logger?.info(`Calculating license metric for ${owner}/${name}`);
   const startTime = performance.now();
   const query = `
@@ -368,9 +373,13 @@ export async function calculate_license_metric(
         lgplCompatibleSpdxIds.includes(registryLicenseName)
       ) {
         licenseScore = 1;
-        logger?.info(`License is compatible with LGPL V2.1: ${registryLicenseName}`);
+        logger?.info(
+          `License is compatible with LGPL V2.1: ${registryLicenseName}`,
+        );
       } else {
-        logger?.info(`License is not compatible with LGPL V2.1: ${registryLicenseName}`);
+        logger?.info(
+          `License is not compatible with LGPL V2.1: ${registryLicenseName}`,
+        );
         licenseScore = 0;
       }
     }
@@ -390,7 +399,7 @@ export function calculate_net_score(
   rampupScore: number,
   correctnessScore: number,
   responsiveMaintenanceScore: number,
-) {
+): { NetScore: number; NetScore_Latency: number } {
   const startTime = performance.now();
   return {
     NetScore:
