@@ -9,9 +9,14 @@ fi
 # Handle different argument values
 case "$1" in
   install)
-    echo "Installing dependencies..."
-    npm i
-    echo "Done."
+    if npm i --silent; then
+      num_dependencies=$(npm list --depth=0 | grep '├──' | wc -l)
+      echo "$num_dependencies dependencies installed..."
+      exit 0
+    else
+      echo "Error installing dependencies. Dependencies not installed."
+      exit 1
+    fi
     ;;
   test)
     echo "Running tests..."
@@ -20,12 +25,13 @@ case "$1" in
     ;;
   *)
     if [[ "$1" == *".txt"* ]]; then
-      npx tsx calculate_metrics "$1"
+      npx tsx src/calculate_metrics "$1"
       rc=$?
       if [ $rc -ne 0 ]; then
         echo "Error calculating metrics."
-        exit $rc
+        exit 1
       fi
+      exit 0
     else
       echo "Invalid argument. Please provide 'install', 'test', or a valid npmjs or GitHub URL."
       exit 1

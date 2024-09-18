@@ -5,7 +5,7 @@ Team Members: Shrijan Swaminathan, Rishab Pangal, Aarav Sumit Patel
 ## Overview
 
 This project is designed to measure various metrics for a GitHub repository, including ramp-up time, correctness, and license compatability with
-LGPL V2.1. Please ensure that you change the location of your `.env` file with the GitHub token inside `calculate_metrics.ts`.
+LGPL V2.1. Please ensure that you have $LOG_LEVEL, $GITHUB_TOKEN, and $LOG_FILE environment variables saved in your current session. One way of doing this is by creating a .env file and running ". .env" in the shell.
 
 ## Prerequisites
 
@@ -30,7 +30,7 @@ LGPL V2.1. Please ensure that you change the location of your `.env` file with t
 
 To run the code and measure the ramp-up time for a repository, follow these steps:
 
-1. Ensure you have a `.env` file with your GitHub token in the project root directory.
+1. Ensure that all environment variables have been saved for the current session.
 
 2. Navigate to the `src` folder:
 
@@ -67,8 +67,14 @@ Here's an example of how to run this:
 
 ```sh
 ./run install
-Installing dependencies...
-Done.
+10 dependencies installed...
+
+Given SampleUrlFile.txt:
+https://github.com/cloudinary/cloudinary_npm
+https://www.npmjs.com/package/express
+https://github.com/nullivex/nodist
+https://github.com/lodash/lodash
+https://www.npmjs.com/package/browserify
 
 ./run ./url_files/SampleUrlFile.txt
 {"URL":"https://github.com/cloudinary/cloudinary_npm","NetScore":-1,"NetScore_Latency":-1,"RampUp":-1,"RampUp_Latency":-1,"Correctness":0.675,"Correctness_Latency":0.633,"BusFactor":-1,"BusFactor_Latency":-1,"ResponsiveMaintainer":0.3,"ResponsiveMaintainer_Latency":0.412,"License":1,"License_Latency":0.414}
@@ -77,5 +83,9 @@ Done.
 {"URL":"https://github.com/lodash/lodash","NetScore":-1,"NetScore_Latency":-1,"RampUp":-1,"RampUp_Latency":-1,"Correctness":0.345,"Correctness_Latency":0.246,"BusFactor":-1,"BusFactor_Latency":-1,"ResponsiveMaintainer":0.7,"ResponsiveMaintainer_Latency":0.51,"License":1,"License_Latency":0.244}
 {"URL":"https://www.npmjs.com/package/browserify","NetScore":-1,"NetScore_Latency":-1,"RampUp":-1,"RampUp_Latency":-1,"Correctness":0.349,"Correctness_Latency":0.473,"BusFactor":-1,"BusFactor_Latency":-1,"ResponsiveMaintainer":0.3,"ResponsiveMaintainer_Latency":0.578,"License":1,"License_Latency":0.165}
 
-Done.
+./run test
+Total: 10
+Passed: 9
+Coverage: 90%
+9/10 test cases passed. 90% line coverage achieved.
 ```
