@@ -4,7 +4,6 @@ import { LicenseInfo } from "./interfaces/LicenseInfo";
 import { RepositoryResponse } from "./interfaces/RepositoryResponse";
 import { CorrectnessInterface } from "./interfaces/correctnessinterface";
 import { get } from "http";
-import * as dotenv from "dotenv";
 import * as git from "isomorphic-git";
 import fs from "fs";
 import http from "isomorphic-git/http/node";
@@ -30,20 +29,26 @@ const lgplCompatibleSpdxIds: string[] = [
   "CC0-1.0",
 ];
 
-// Provide path to env file here
-dotenv.config();
+// Should be loaded from environment variables
 const githubToken = process.env.GITHUB_TOKEN;
 if (!githubToken) {
-  throw new Error("GITHUB_TOKEN is not defined");
+  console.log("GITHUB_TOKEN is not defined");
+  process.exit(1);
 }
-const loglevel = Number(process.env.LOG_LEVEL);
+
+let loglevel = Number(process.env.LOG_LEVEL);
+// if loglevel is not defined, set it to default value of 0
+if (!loglevel) {
+  loglevel = 0;
+}
+
 let logfile = process.env.LOG_FILE;
 // format the logfile path correctly
 if (logfile) {
   logfile = path.resolve(logfile);
-}
-else {
-  throw new Error("LOG_FILE is not defined");
+} else {
+  console.log("LOG_FILE is not defined");
+  process.exit(1);
 }
 
 const graphqlWithAuth = graphql.defaults({
@@ -52,8 +57,11 @@ const graphqlWithAuth = graphql.defaults({
   },
 });
 
+/*** Create a logger object using winston
+when you are trying to make a debug message, you can use the logger.debug() function
+when you are trying to make an info message, you can use the logger.info() function
+**/
 let logger: winston.Logger | undefined;
-// Create a logger
 if (loglevel && logfile) {
   logger = winston.createLogger({
     // level is set to 'info' if loglevel is 1, and 'debug' if loglevel is 2
@@ -65,13 +73,14 @@ if (loglevel && logfile) {
     transports: [new winston.transports.File({ filename: logfile })],
   });
 }
-// when you are trying to make a debug message, you can use the logger.debug() function
-// when you are trying to make an info message, you can use the logger.info() function
 
+// Given a start time, calculate the latency, in seconds rounded to 3 decimal places
 function getLatency(startTime: number): number {
   return Number(((performance.now() - startTime) / 1000).toFixed(3));
 }
 
+// Given a URL, fetch the owner and repository name. Will handle
+// both github.com and npmjs.com URLs
 export async function fetch_repo_info(
   url_link: string,
 ): Promise<{ owner: string | undefined; name: string | undefined }> {
