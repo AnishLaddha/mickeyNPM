@@ -34,7 +34,7 @@ const lgplCompatibleSpdxIds: string[] = [
 dotenv.config();
 const githubToken = process.env.GITHUB_TOKEN;
 if (!githubToken) {
-  throw new Error("GITHUB_TOKEN is required");
+  throw new Error("GITHUB_TOKEN is not defined");
 }
 const loglevel = Number(process.env.LOG_LEVEL);
 let logfile = process.env.LOG_FILE;
@@ -42,7 +42,9 @@ let logfile = process.env.LOG_FILE;
 if (logfile) {
   logfile = path.resolve(logfile);
 }
-console.log(logfile, loglevel);
+else {
+  throw new Error("LOG_FILE is not defined");
+}
 
 const graphqlWithAuth = graphql.defaults({
   headers: {
