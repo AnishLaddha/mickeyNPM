@@ -97,9 +97,9 @@ export async function calculate_rampup_metric(
   owner: string | undefined,
   name: string | undefined,
 ): Promise<{ RampUp: number; RampUp_Latency: number }> {
-  // use isomorphic-git to clone the repo
   logger?.info(`Calculating ramp-up metric for ${owner}/${name}`);
   const startTime = performance.now();
+
   logger?.debug(`Cloning repository https://github.com/${owner}/${name}.git`);
   try {
     await git.clone({
@@ -109,37 +109,87 @@ export async function calculate_rampup_metric(
       url: `https://github.com/${owner}/${name}.git`,
       singleBranch: true,
       depth: 100,
-      noCheckout: true, //handles symbolic links
+      noCheckout: true, // handles symbolic links
     });
     logger?.info(`Successfully cloned ${owner}/${name}`);
   } catch (error) {
     logger?.error(`Failed to clone ${owner}/${name}: ${error}`);
+    return { RampUp: 0, RampUp_Latency: getLatency(startTime) };
   }
-  //perform analysis on the cloned repo for rampup time
-  // Measure the time from when a developer first forks or clones the repository to when they submit their first pull request.
-  // For this, we need to check the commits and PRs in the cloned repo. WE CANT USE THE GITHUB API FOR THIS
-  // get all the commits
-  // const commits = await git.log({
-  //   fs,
-  //   dir: `./src/repos/${name}`,
-  //   depth: 5,
-  // });
-  // console.log(commits.length);
-  // // get all the pull requests
-  // const prs = await git.listBranches({
-  //   fs,
-  //   dir: `./repos/${name}`,
-  // });
-  // delete the cloned repo
-  logger?.debug("Deleting cloned repository");
-  fs.rm(`./src/repos/${name}`, { recursive: true }, (err) => {
-    if (err) {
-      logger?.error(err);
+
+
+  try {
+    const query = `
+      query {
+        repository(owner: "${owner}", name: "${name}") {
+          pullRequests(first: 1, orderBy: {field: CREATED_AT, direction: ASC}) {
+            edges {
+              node {
+                createdAt
+              }
+            }
+          }
+          defaultBranchRef {
+            target {
+              ... on Commit {
+                history(first: 1) {
+                  edges {
+                    node {
+                      committedDate
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    const response = await graphqlWithAuth<RampUpResponse>(query);
+    logger?.info("Ramp-up GraphQL response successful");
+
+    const firstPullRequestDate = response.repository.pullRequests.edges.length
+      ? new Date(response.repository.pullRequests.edges[0].node.createdAt)
+      : null;
+
+
+    const firstCommitDate = response.repository.defaultBranchRef.target.history.edges.length
+      ? new Date(response.repository.defaultBranchRef.target.history.edges[0].node.committedDate)
+      : null;
+
+    if (!firstCommitDate) {
+      logger?.warn("No commit history found.");
+      return { RampUp: 0, RampUp_Latency: getLatency(startTime) };
     }
-  });
-  logger?.info(`Ramp-up metric calculation completed for ${owner}/${name}`);
-  return { RampUp: -1, RampUp_Latency: -1 };
+
+    if (!firstPullRequestDate) {
+      logger?.warn("No pull request history found.");
+      return { RampUp: 0.5, RampUp_Latency: getLatency(startTime) };
+    }
+
+    const timeDiff = (firstPullRequestDate.getTime() - firstCommitDate.getTime()) / (1000 * 60 * 60 * 24); // days
+    logger?.debug(`Time difference in days between first commit and first PR: ${timeDiff}`);
+
+    const rampUpScore = timeDiff < 30 ? 1 : Math.max(0, 1 - Math.log10(timeDiff / 30));
+    logger?.info(`Ramp-up score calculated: ${rampUpScore}`);
+
+    // delete the cloned repository
+    logger?.debug("Deleting cloned repository");
+    fs.rm(`./src/repos/${name}`, { recursive: true }, (err) => {
+      if (err) {
+        logger?.error(err);
+      }
+    });
+
+    return { RampUp: Number(rampUpScore.toFixed(3)), RampUp_Latency: getLatency(startTime) };
+    
+  } catch (error) {
+    logger?.error(`Error calculating ramp-up metric: ${error}`);
+    return { RampUp: 0, RampUp_Latency: getLatency(startTime) };
+  }
 }
+
 
 export async function calculate_correctness_metric(
   owner: string | undefined,

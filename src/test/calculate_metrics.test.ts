@@ -42,7 +42,7 @@ describe("calculate_metrics", () => {
     (git.clone as jest.Mock).mockResolvedValue(undefined);
     (fs.rm as jest.Mock).mockImplementation((path, options, callback) =>
       callback(null),
-    );
+    )
 
     const result = await calculate_rampup_metric("owner", "name");
     expect(result).toHaveProperty("rampupScore");
