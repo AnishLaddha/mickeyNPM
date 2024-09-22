@@ -5,11 +5,15 @@ import { RepositoryResponse } from "./interfaces/RepositoryResponse";
 import { CorrectnessInterface } from "./interfaces/correctnessinterface";
 import { get } from "http";
 import * as git from "isomorphic-git";
-import fs from "fs";
+import fs, { cp } from "fs";
 import http from "isomorphic-git/http/node";
 import axios from "axios";
 import * as path from "path";
 import winston from "winston";
+import { getSystemErrorMap } from "util";
+import { timeStamp } from "console";
+import { doc, StringSupportOption } from "prettier";
+import { Z_DEFAULT_STRATEGY } from "zlib";
 
 const lgplCompatibleSpdxIds: string[] = [
   "LGPL-2.1-only",
@@ -97,64 +101,143 @@ export async function calculate_rampup_metric(
   owner: string | undefined,
   name: string | undefined,
 ): Promise<{ RampUp: number; RampUp_Latency: number }> {
+  if (!owner || !name)
+  {
+    throw new Error('Owner or name is undefined');
+  }
+  const timeoutDuration = 300000;
+  const timeoutPromise = new Promise<{ RampUp: number; RampUp_Latency: number }>((_, reject) => {
+    setTimeout(() => reject(new Error('Operation timed out')), timeoutDuration);
+  });
+
+  try {
+    return await Promise.race([
+      calculateRampUp(owner, name),
+      timeoutPromise
+    ]);
+  } catch (error) {
+    logger?.error(`Error or timeout in calculate_rampup_metric: ${error}`);
+    return { RampUp: 0, RampUp_Latency: timeoutDuration / 1000 };
+  }
+}
+async function calculateRampUp(owner: string, name: string): Promise<{ RampUp: number; RampUp_Latency: number }> {  
   logger?.info(`Calculating ramp-up metric for ${owner}/${name}`);
   const startTime = performance.now();
-  
-  logger?.debug(`Cloning repository https://github.com/${owner}/${name}.git`);
+  //clone the repository into the repos directory
+  const repoDir = `./src/repos/${name}`
   try {
     // Clone the repository using isomorphic-git
+    logger?.debug(`Cloning repository https://github.com/${owner}/${name}.git`);
     await git.clone({
       fs,
       http,
-      dir: "./src/repos/" + name,
+      dir: repoDir,
       url: `https://github.com/${owner}/${name}.git`,
       singleBranch: true,
-      depth: 100,  
+      depth: 1,  
       noCheckout: true,  
     });
     logger?.info(`Successfully cloned ${owner}/${name}`);
-  } catch (error) {
-    logger?.error(`Failed to clone ${owner}/${name}: ${error}`);
-    return { RampUp: 0, RampUp_Latency: getLatency(startTime) };
-  }
-
-  try {
-    const commits = await git.log({
-      fs,
-      dir: `./src/repos/${name}`,
-      depth: 100,  
-    });
-
-    if (commits.length === 0) {
-      logger?.warn("No commits found in the repository.");
-      return { RampUp: 0, RampUp_Latency: getLatency(startTime) };
-    }
-
-    // time difference between commits.
-    const firstCommitDate = new Date(commits[commits.length - 1].commit.committer.timestamp * 1000);  
-    const latestCommitDate = new Date(commits[0].commit.committer.timestamp * 1000);  //new commit
-
-    const timeDiffInDays = (latestCommitDate.getTime() - firstCommitDate.getTime()) / (1000 * 60 * 60 * 24);
-    logger?.debug(`Time difference in days between first and latest commit: ${timeDiffInDays}`);
-
-    const rampUpScore = timeDiffInDays < 30 ? 1 : Math.max(0, 1 - Math.log10(timeDiffInDays / 30));
-    logger?.info(`Ramp-up score calculated: ${rampUpScore}`);
-
+    //calculate rampup score
+    const rampUpScore = await analyzeRepoStatic(repoDir);
+    logger?.info(`Ramp-up score calculated: ${rampUpScore}`);  
+    // delete repo from local
     logger?.debug("Deleting cloned repository");
-    fs.rm(`./src/repos/${name}`, { recursive: true }, (err) => {
+    fs.rm(repoDir, { recursive: true }, (err) => {
       if (err) {
         logger?.error(err);
       }
     });
-
     return { RampUp: Number(rampUpScore.toFixed(3)), RampUp_Latency: getLatency(startTime) };
-
   } catch (error) {
     logger?.error(`Error calculating ramp-up metric: ${error}`);
+    console.log(`Error calculating ramp-up metric: ${error}`);
     return { RampUp: 0, RampUp_Latency: getLatency(startTime) };
   }
 }
+async function analyzeRepoStatic(repoDir: string): Promise<number> {
+  const weights = {
+    readme: 0.1,
+    documentation: 0.3,
+    examples: 0.3,
+    complexity: 0.3,
+  }
+  try {
+    // List branches
+    const branches = await git.listBranches({ fs, dir: repoDir, remote: 'origin' });
+    logger?.debug(`Remote branches found: ${branches.join(', ')}`);
 
+    // Use the first branch or 'main' or 'master' if available
+    const defaultBranch = branches.find(b => ['main', 'master'].includes(b)) || branches[0];
+    if (!defaultBranch) {
+      throw new Error('No branches found');
+    }
+    logger?.debug(`Using branch: ${defaultBranch}`);
+
+    // Resolve the reference to get the commit hash
+    const oid = await git.resolveRef({ fs, dir: repoDir, ref: defaultBranch });
+    logger?.debug(`Resolved ref: ${oid}`);
+
+    // Read the tree for this commit
+    const allFiles = await getAllFilesStatic(repoDir, oid);
+    // check if a readme exists
+    const readmeRegex = /^readme\.(md|txt|markdown)$/i;
+    const readMeScore = allFiles.some(file => readmeRegex.test(file.path)) ? weights.readme : 0;
+    //check if proper documentation exists
+    const docFiles = allFiles.filter(file => 
+      file.path.toLowerCase().includes('docs') || 
+      file.path.toLowerCase().endsWith('.md') ||
+      file.path.toLowerCase().endsWith('.markdown') ||
+      file.path.toLowerCase().endsWith('.txt')      ||
+      file.path.toLowerCase().endsWith('.rst') ||
+      file.path.toLowerCase().endsWith('.adoc')
+    );
+    const docScore = weights.documentation * Math.min(docFiles.length / 20, 1);
+    
+    //check if examples exist
+    const exampleFiles = allFiles.filter(file => 
+      file.path.toLowerCase().includes('example') || 
+      file.path.toLowerCase().includes('demo')    ||
+      file.path.toLowerCase().includes('practice')
+    );
+    const exScore = weights.examples * Math.min(exampleFiles.length / 10, 1);
+    
+    // check the code complexity
+    const complexityScore = weights.complexity * (await analyzeComplexityStatic(allFiles));
+
+    const score = readMeScore + docScore + exScore + complexityScore;
+    logger?.debug(`Scores - README: ${readMeScore}, Documentation: ${docScore}, Examples: ${exScore}, Complexity: ${complexityScore}`);
+    console.log(`Scores - README: ${readMeScore}, Documentation: ${docScore}, Examples: ${exScore}, Complexity: ${complexityScore}`);
+    return Math.max(0, Math.min(1, score));
+  } catch (error) {
+    logger?.error(`Error in analyzeRepoStatic: ${error}`);
+    return 0;
+  }
+}
+async function analyzeComplexityStatic(allFiles: any[]): Promise<number> {
+  const codeFiles = allFiles.filter(entry => 
+    /\.(ts|js|jsx|tsx|py|java|c|cpp|cs)$/i.test(entry.path)
+  );
+  // a lot of files means high code complexity
+  return 1 - Math.min(codeFiles.length / 1000, 1);
+}
+async function getAllFilesStatic(repoDir: string, oid: string): Promise<Array<{ path: string, oid: string }>> {
+  const { tree } = await git.readTree({ fs, dir: repoDir, oid });
+  let allFiles: Array<{ path: string, oid: string }> = [];
+
+  for (const entry of tree) {
+    if (entry.type === 'tree') {
+      const subFiles = await getAllFilesStatic(repoDir, entry.oid);
+      allFiles = allFiles.concat(subFiles.map(file => ({
+        path: `${entry.path}/${file.path}`,
+        oid: file.oid
+      })));
+    } else {
+      allFiles.push({ path: entry.path, oid: entry.oid });
+    }
+  }
+  return allFiles;
+}
 
 export async function calculate_correctness_metric(
   owner: string | undefined,
@@ -526,7 +609,42 @@ async function main() {
     }, 1000);
   }
 }
+async function main2() {
+  try {
+    logger?.info("Starting metric calculation");
+    const url_file = process.argv[2];
+    // open the file
+    logger?.info(`Reading URLs from file: ${url_file}`);
+    const url_data = fs.readFileSync(url_file, "utf8");
+    // parse line by line
+    const urls = url_data.split("\n").map((url) => url.trim());
+    logger?.info(`Read ${urls.length} URLs from file`);
+    let ndjson_data = [];
+    // iterate over each url
+    for (const url of urls) {
+      if (url != "") {
+        logger?.info(`Calculating metrics for ${url}`);
+        const { owner, name } = await fetch_repo_info(url);
+        logger?.debug(`Owner: ${owner}, Name: ${name}`);
+
+        // Calculate metrics concurrently
+        const [
+          { RampUp, RampUp_Latency },
+        ] = await Promise.all([
+          
+          calculate_rampup_metric(owner, name),
+        ]);
+        console.log(RampUp, RampUp_Latency)
+      }
+    }
+  } catch (error) {
+    logger?.error(error);
+    setTimeout(() => {
+      process.exit(1);
+    }, 1000);
+  }
+}
 
 if (require.main === module) {
-  main();
+  main2();
 }
