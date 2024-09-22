@@ -99,17 +99,18 @@ export async function calculate_rampup_metric(
 ): Promise<{ RampUp: number; RampUp_Latency: number }> {
   logger?.info(`Calculating ramp-up metric for ${owner}/${name}`);
   const startTime = performance.now();
-
+  
   logger?.debug(`Cloning repository https://github.com/${owner}/${name}.git`);
   try {
+    // Clone the repository using isomorphic-git
     await git.clone({
       fs,
       http,
       dir: "./src/repos/" + name,
       url: `https://github.com/${owner}/${name}.git`,
       singleBranch: true,
-      depth: 100,
-      noCheckout: true, // handles symbolic links
+      depth: 100,  
+      noCheckout: true,  
     });
     logger?.info(`Successfully cloned ${owner}/${name}`);
   } catch (error) {
@@ -117,64 +118,28 @@ export async function calculate_rampup_metric(
     return { RampUp: 0, RampUp_Latency: getLatency(startTime) };
   }
 
-
   try {
-    const query = `
-      query {
-        repository(owner: "${owner}", name: "${name}") {
-          pullRequests(first: 1, orderBy: {field: CREATED_AT, direction: ASC}) {
-            edges {
-              node {
-                createdAt
-              }
-            }
-          }
-          defaultBranchRef {
-            target {
-              ... on Commit {
-                history(first: 1) {
-                  edges {
-                    node {
-                      committedDate
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    `;
+    const commits = await git.log({
+      fs,
+      dir: `./src/repos/${name}`,
+      depth: 100,  
+    });
 
-    const response = await graphqlWithAuth<RampUpResponse>(query);
-    logger?.info("Ramp-up GraphQL response successful");
-
-    const firstPullRequestDate = response.repository.pullRequests.edges.length
-      ? new Date(response.repository.pullRequests.edges[0].node.createdAt)
-      : null;
-
-
-    const firstCommitDate = response.repository.defaultBranchRef.target.history.edges.length
-      ? new Date(response.repository.defaultBranchRef.target.history.edges[0].node.committedDate)
-      : null;
-
-    if (!firstCommitDate) {
-      logger?.warn("No commit history found.");
+    if (commits.length === 0) {
+      logger?.warn("No commits found in the repository.");
       return { RampUp: 0, RampUp_Latency: getLatency(startTime) };
     }
 
-    if (!firstPullRequestDate) {
-      logger?.warn("No pull request history found.");
-      return { RampUp: 0.5, RampUp_Latency: getLatency(startTime) };
-    }
+    // time difference between commits.
+    const firstCommitDate = new Date(commits[commits.length - 1].commit.committer.timestamp * 1000);  
+    const latestCommitDate = new Date(commits[0].commit.committer.timestamp * 1000);  //new commit
 
-    const timeDiff = (firstPullRequestDate.getTime() - firstCommitDate.getTime()) / (1000 * 60 * 60 * 24); // days
-    logger?.debug(`Time difference in days between first commit and first PR: ${timeDiff}`);
+    const timeDiffInDays = (latestCommitDate.getTime() - firstCommitDate.getTime()) / (1000 * 60 * 60 * 24);
+    logger?.debug(`Time difference in days between first and latest commit: ${timeDiffInDays}`);
 
-    const rampUpScore = timeDiff < 30 ? 1 : Math.max(0, 1 - Math.log10(timeDiff / 30));
+    const rampUpScore = timeDiffInDays < 30 ? 1 : Math.max(0, 1 - Math.log10(timeDiffInDays / 30));
     logger?.info(`Ramp-up score calculated: ${rampUpScore}`);
 
-    // delete the cloned repository
     logger?.debug("Deleting cloned repository");
     fs.rm(`./src/repos/${name}`, { recursive: true }, (err) => {
       if (err) {
@@ -183,7 +148,7 @@ export async function calculate_rampup_metric(
     });
 
     return { RampUp: Number(rampUpScore.toFixed(3)), RampUp_Latency: getLatency(startTime) };
-    
+
   } catch (error) {
     logger?.error(`Error calculating ramp-up metric: ${error}`);
     return { RampUp: 0, RampUp_Latency: getLatency(startTime) };
