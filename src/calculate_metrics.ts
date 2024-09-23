@@ -103,7 +103,11 @@ export async function calculate_rampup_metric(
   logger?.info(`Calculating ramp-up metric for ${owner}/${name}`);
   const startTime = performance.now();
   //clone the repository into the repos directory
-  const repoDir = `./src/repos/${name}`
+  const reposDir = path.join(__dirname, 'repos');
+  if (!fs.existsSync(reposDir)) {
+    fs.mkdirSync(reposDir, { recursive: true });
+  }
+  const repoDir = path.join(reposDir, name!);
   try {
     // Clone the repository using isomorphic-git
     logger?.debug(`Cloning repository https://github.com/${owner}/${name}.git`);
@@ -130,6 +134,12 @@ export async function calculate_rampup_metric(
     return { RampUp: Number(rampUpScore.toFixed(3)), RampUp_Latency: getLatency(startTime) };
   } catch (error) {
     logger?.error(`Error calculating ramp-up metric: ${error}`);
+    fs.rm(repoDir, { recursive: true }, (err) => {
+      if (err) {
+        logger?.error(err);
+      }
+    });
+    
     return { RampUp: 0, RampUp_Latency: getLatency(startTime) };
   }
 }
@@ -301,6 +311,7 @@ export async function calculate_responsiveness_metric(
   query {
     repository(owner: "${owner}", name: "${name}") {
       pullRequests(first: 100, states: [OPEN, MERGED, CLOSED]) {
+        totalCount
         edges {
           node {
             createdAt
@@ -311,6 +322,7 @@ export async function calculate_responsiveness_metric(
         }
       }
       issues(first: 100, states: [OPEN, CLOSED]) {
+        totalCount
         edges {
           node {
             createdAt
@@ -329,6 +341,14 @@ export async function calculate_responsiveness_metric(
     const pullRequests = response.repository.pullRequests.edges;
     const issues = response.repository.issues.edges;
 
+    // Base case: if there are no pull requests and no issues
+    if (response.repository.pullRequests.totalCount === 0 && response.repository.issues.totalCount === 0) {
+      logger?.info(`Responsiveness score is 0: No pull requests or issues found`);
+      return {
+        ResponsiveMaintainer: 0,
+        ResponsiveMaintainer_Latency: getLatency(startTime),
+      };
+    }
     //  Pull Requests
     let totalPrResponseTime = 0;
     let resolvedPrs = 0;
@@ -363,6 +383,15 @@ export async function calculate_responsiveness_metric(
         resolvedIssues++;
       }
     });
+
+    // Base case: if all pull requests and issues are open
+    if (resolvedPrs === 0 && resolvedIssues === 0) {
+      logger?.info(`Responsiveness score is 0: No closed pull requests or issues`);
+      return {
+        ResponsiveMaintainer: 0,
+        ResponsiveMaintainer_Latency: getLatency(startTime),
+      };
+    }
 
     const avgIssueResponseTime =
       resolvedIssues > 0 ? totalIssueResponseTime / resolvedIssues : Infinity;

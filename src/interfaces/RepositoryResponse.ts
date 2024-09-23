@@ -1,23 +1,29 @@
 interface PullRequestNode {
   createdAt: string;
-  closedAt?: string;
-  mergedAt?: string;
+  closedAt: string | null;
+  mergedAt: string | null;
   state: string;
 }
 
 interface IssueNode {
   createdAt: string;
-  closedAt?: string;
+  closedAt: string | null;
   state: string;
 }
 
 export interface RepositoryResponse {
   repository: {
     pullRequests: {
-      edges: { node: PullRequestNode }[];
+      totalCount: number;
+      edges: Array<{
+        node: PullRequestNode;
+      }>;
     };
     issues: {
-      edges: { node: IssueNode }[];
+      totalCount: number;
+      edges: Array<{
+        node: IssueNode;
+      }>;
     };
   };
 }
