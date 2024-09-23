@@ -19,9 +19,8 @@ case "$1" in
     fi
     ;;
   test)
-    echo "Running tests..."
-    npm test
-    echo "Done."
+    npx tsx src/test/test_all.ts
+    exit 0
     ;;
   *)
     if [[ "$1" == *".txt"* ]]; then

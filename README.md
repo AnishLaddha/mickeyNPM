@@ -32,10 +32,11 @@ To run the code and measure the ramp-up time for a repository, follow these step
 
 1. Ensure that all environment variables have been saved for the current session.
 
-2. Navigate to the `src` folder:
+2. Ensure you are in the root directory of mickeyNPM:
 
    ```sh
-   cd src
+   pwd
+   ~/mickeyNPM
    ```
 
 3. Run the `run.sh` script:
@@ -84,8 +85,8 @@ https://www.npmjs.com/package/browserify
 {"URL":"https://www.npmjs.com/package/browserify","NetScore":-1,"NetScore_Latency":-1,"RampUp":-1,"RampUp_Latency":-1,"Correctness":0.349,"Correctness_Latency":0.473,"BusFactor":-1,"BusFactor_Latency":-1,"ResponsiveMaintainer":0.3,"ResponsiveMaintainer_Latency":0.578,"License":1,"License_Latency":0.165}
 
 ./run test
-Total: 10
-Passed: 9
-Coverage: 90%
-9/10 test cases passed. 90% line coverage achieved.
+Total: 20
+Passed: 20
+Coverage: 100%
+20/20 test cases passed. 100% line coverage achieved.
 ```

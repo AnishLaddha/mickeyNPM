@@ -3,17 +3,12 @@ import { url_main } from "./url_handler";
 import { LicenseInfo } from "./interfaces/LicenseInfo";
 import { RepositoryResponse } from "./interfaces/RepositoryResponse";
 import { CorrectnessInterface } from "./interfaces/correctnessinterface";
-import { get } from "http";
 import * as git from "isomorphic-git";
-import fs, { cp } from "fs";
+import fs from "fs";
 import http from "isomorphic-git/http/node";
 import axios from "axios";
 import * as path from "path";
 import winston from "winston";
-import { getSystemErrorMap } from "util";
-import { timeStamp } from "console";
-import { doc, StringSupportOption } from "prettier";
-import { Z_DEFAULT_STRATEGY } from "zlib";
 
 const lgplCompatibleSpdxIds: string[] = [
   "LGPL-2.1-only",
@@ -38,6 +33,10 @@ const githubToken = process.env.GITHUB_TOKEN;
 if (!githubToken) {
   console.log("GITHUB_TOKEN is not defined");
   process.exit(1);
+}
+else if( !githubToken.includes('ghp_')) {
+    console.log("Invalid GITHUB_TOKEN");
+    process.exit(1);
 }
 
 let loglevel = Number(process.env.LOG_LEVEL);
@@ -101,26 +100,6 @@ export async function calculate_rampup_metric(
   owner: string | undefined,
   name: string | undefined,
 ): Promise<{ RampUp: number; RampUp_Latency: number }> {
-  if (!owner || !name)
-  {
-    throw new Error('Owner or name is undefined');
-  }
-  const timeoutDuration = 300000;
-  const timeoutPromise = new Promise<{ RampUp: number; RampUp_Latency: number }>((_, reject) => {
-    setTimeout(() => reject(new Error('Operation timed out')), timeoutDuration);
-  });
-
-  try {
-    return await Promise.race([
-      calculateRampUp(owner, name),
-      timeoutPromise
-    ]);
-  } catch (error) {
-    logger?.error(`Error or timeout in calculate_rampup_metric: ${error}`);
-    return { RampUp: 0, RampUp_Latency: timeoutDuration / 1000 };
-  }
-}
-async function calculateRampUp(owner: string, name: string): Promise<{ RampUp: number; RampUp_Latency: number }> {  
   logger?.info(`Calculating ramp-up metric for ${owner}/${name}`);
   const startTime = performance.now();
   //clone the repository into the repos directory
@@ -151,10 +130,10 @@ async function calculateRampUp(owner: string, name: string): Promise<{ RampUp: n
     return { RampUp: Number(rampUpScore.toFixed(3)), RampUp_Latency: getLatency(startTime) };
   } catch (error) {
     logger?.error(`Error calculating ramp-up metric: ${error}`);
-    console.log(`Error calculating ramp-up metric: ${error}`);
     return { RampUp: 0, RampUp_Latency: getLatency(startTime) };
   }
 }
+
 async function analyzeRepoStatic(repoDir: string): Promise<number> {
   const weights = {
     readme: 0.1,
@@ -207,7 +186,6 @@ async function analyzeRepoStatic(repoDir: string): Promise<number> {
 
     const score = readMeScore + docScore + exScore + complexityScore;
     logger?.debug(`Scores - README: ${readMeScore}, Documentation: ${docScore}, Examples: ${exScore}, Complexity: ${complexityScore}`);
-    console.log(`Scores - README: ${readMeScore}, Documentation: ${docScore}, Examples: ${exScore}, Complexity: ${complexityScore}`);
     return Math.max(0, Math.min(1, score));
   } catch (error) {
     logger?.error(`Error in analyzeRepoStatic: ${error}`);
@@ -525,7 +503,7 @@ export function calculate_net_score(
   const startTime = performance.now();
   return {
     NetScore:
-      0.3 * licenseScore +
+      0.35 * licenseScore +
       0.2 * rampupScore +
       0.25 * correctnessScore +
       0.2 * responsiveMaintenanceScore,
@@ -550,6 +528,28 @@ async function main() {
         logger?.info(`Calculating metrics for ${url}`);
         const { owner, name } = await fetch_repo_info(url);
         logger?.debug(`Owner: ${owner}, Name: ${name}`);
+        if (owner === undefined && name === undefined) {
+          const blankData = {
+            URL: url,
+            NetScore: 0,
+            NetScore_Latency: 0,
+            RampUp: 0,
+            RampUp_Latency: 0,
+            Correctness: 0,
+            Correctness_Latency: 0,
+            BusFactor: -1,
+            BusFactor_Latency: -1,
+            ResponsiveMaintainer: 0,
+            ResponsiveMaintainer_Latency: 0,
+            License: 0,
+            License_Latency: 0,
+          };
+
+          const json = JSON.stringify(blankData);
+          ndjson_data.push(json);
+          logger?.info(`Added blank data for ${url} due to undefined owner or name`);
+          continue;
+        }
 
         // Calculate metrics concurrently
         const [
@@ -609,42 +609,7 @@ async function main() {
     }, 1000);
   }
 }
-async function main2() {
-  try {
-    logger?.info("Starting metric calculation");
-    const url_file = process.argv[2];
-    // open the file
-    logger?.info(`Reading URLs from file: ${url_file}`);
-    const url_data = fs.readFileSync(url_file, "utf8");
-    // parse line by line
-    const urls = url_data.split("\n").map((url) => url.trim());
-    logger?.info(`Read ${urls.length} URLs from file`);
-    let ndjson_data = [];
-    // iterate over each url
-    for (const url of urls) {
-      if (url != "") {
-        logger?.info(`Calculating metrics for ${url}`);
-        const { owner, name } = await fetch_repo_info(url);
-        logger?.debug(`Owner: ${owner}, Name: ${name}`);
-
-        // Calculate metrics concurrently
-        const [
-          { RampUp, RampUp_Latency },
-        ] = await Promise.all([
-          
-          calculate_rampup_metric(owner, name),
-        ]);
-        console.log(RampUp, RampUp_Latency)
-      }
-    }
-  } catch (error) {
-    logger?.error(error);
-    setTimeout(() => {
-      process.exit(1);
-    }, 1000);
-  }
-}
 
 if (require.main === module) {
-  main2();
+  main();
 }

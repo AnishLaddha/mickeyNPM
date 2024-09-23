@@ -1,5 +1,6 @@
 // use axios to fetch data from the url and return the response
 import axios from "axios";
+import { exit } from "process";
 
 // get third argument from the command line
 function handle_npm_url(cli_url: string) {
@@ -47,5 +48,11 @@ export async function url_main(url: string) {
   } else if (url.includes("github.com")) {
     let { repo_owner, repo_name } = get_repoowner_reponame(url);
     return { repo_owner, repo_name };
+  }
+  else
+  {
+    const output1 = 'undefined';
+    const output2 = 'undefined';
+    return { output1, output2 };
   }
 }
