@@ -33,10 +33,9 @@ const githubToken = process.env.GITHUB_TOKEN;
 if (!githubToken) {
   console.log("GITHUB_TOKEN is not defined");
   process.exit(1);
-}
-else if( !githubToken.includes('ghp_')) {
-    console.log("Invalid GITHUB_TOKEN");
-    process.exit(1);
+} else if (!githubToken.includes("ghp_")) {
+  console.log("Invalid GITHUB_TOKEN");
+  process.exit(1);
 }
 
 let loglevel = Number(process.env.LOG_LEVEL);
@@ -103,7 +102,7 @@ export async function calculate_rampup_metric(
   logger?.info(`Calculating ramp-up metric for ${owner}/${name}`);
   const startTime = performance.now();
   //clone the repository into the repos directory
-  const reposDir = path.join(__dirname, 'repos');
+  const reposDir = path.join(__dirname, "repos");
   if (!fs.existsSync(reposDir)) {
     fs.mkdirSync(reposDir, { recursive: true });
   }
@@ -117,13 +116,13 @@ export async function calculate_rampup_metric(
       dir: repoDir,
       url: `https://github.com/${owner}/${name}.git`,
       singleBranch: true,
-      depth: 1,  
-      noCheckout: true,  
+      depth: 1,
+      noCheckout: true,
     });
     logger?.info(`Successfully cloned ${owner}/${name}`);
     //calculate rampup score
     const rampUpScore = await analyzeRepoStatic(repoDir);
-    logger?.info(`Ramp-up score calculated: ${rampUpScore}`);  
+    logger?.info(`Ramp-up score calculated: ${rampUpScore}`);
     // delete repo from local
     logger?.debug("Deleting cloned repository");
     fs.rm(repoDir, { recursive: true }, (err) => {
@@ -131,7 +130,10 @@ export async function calculate_rampup_metric(
         logger?.error(err);
       }
     });
-    return { RampUp: Number(rampUpScore.toFixed(3)), RampUp_Latency: getLatency(startTime) };
+    return {
+      RampUp: Number(rampUpScore.toFixed(3)),
+      RampUp_Latency: getLatency(startTime),
+    };
   } catch (error) {
     logger?.error(`Error calculating ramp-up metric: ${error}`);
     fs.rm(repoDir, { recursive: true }, (err) => {
@@ -139,7 +141,7 @@ export async function calculate_rampup_metric(
         logger?.error(err);
       }
     });
-    
+
     return { RampUp: 0, RampUp_Latency: getLatency(startTime) };
   }
 }
@@ -149,16 +151,21 @@ async function analyzeRepoStatic(repoDir: string): Promise<number> {
     documentation: 0.4,
     examples: 0.3,
     complexity: 0.3,
-  }
+  };
   try {
     // List branches
-    const branches = await git.listBranches({ fs, dir: repoDir, remote: 'origin' });
-    logger?.debug(`Remote branches found: ${branches.join(', ')}`);
+    const branches = await git.listBranches({
+      fs,
+      dir: repoDir,
+      remote: "origin",
+    });
+    logger?.debug(`Remote branches found: ${branches.join(", ")}`);
 
     // Use the first branch or 'main' or 'master' if available
-    const defaultBranch = branches.find(b => ['main', 'master'].includes(b)) || branches[0];
+    const defaultBranch =
+      branches.find((b) => ["main", "master"].includes(b)) || branches[0];
     if (!defaultBranch) {
-      throw new Error('No branches found');
+      throw new Error("No branches found");
     }
     logger?.debug(`Using branch: ${defaultBranch}`);
 
@@ -169,34 +176,40 @@ async function analyzeRepoStatic(repoDir: string): Promise<number> {
     // Read the tree for this commit
     const allFiles = await getAllFilesStatic(repoDir, oid);
     //check if proper documentation exists
-    const docFiles = allFiles.filter(file => 
-      file.path.toLowerCase().includes('doc') || 
-      file.path.toLowerCase().includes('guide') ||
-      /\.(md|markdown|txt|rst|adoc|wiki)$/i.test(file.path)
+    const docFiles = allFiles.filter(
+      (file) =>
+        file.path.toLowerCase().includes("doc") ||
+        file.path.toLowerCase().includes("guide") ||
+        /\.(md|markdown|txt|rst|adoc|wiki)$/i.test(file.path),
     );
     const docScore = weights.documentation * Math.min(docFiles.length / 5, 1);
-    
+
     //check if examples exist
-    const exampleFiles = allFiles.filter(file => {
+    const exampleFiles = allFiles.filter((file) => {
       const lowercasePath = file.path.toLowerCase();
-      return lowercasePath.includes('example') ||
-             lowercasePath.includes('demo') ||
-             lowercasePath.includes('sample') ||
-             lowercasePath.includes('tutorial') ||
-             lowercasePath.includes('quickstart') ||
-             lowercasePath.includes('getting-started') ||
-             lowercasePath.includes('usage') ||
-             /test.*\.js/i.test(file.path);
+      return (
+        lowercasePath.includes("example") ||
+        lowercasePath.includes("demo") ||
+        lowercasePath.includes("sample") ||
+        lowercasePath.includes("tutorial") ||
+        lowercasePath.includes("quickstart") ||
+        lowercasePath.includes("getting-started") ||
+        lowercasePath.includes("usage") ||
+        /test.*\.js/i.test(file.path)
+      );
     });
     const exScore = weights.examples * Math.min(exampleFiles.length / 5, 1);
-    
+
     // check the code complexity
-    const complexityScore = weights.complexity * (await analyzeComplexityStatic(allFiles));
+    const complexityScore =
+      weights.complexity * (await analyzeComplexityStatic(allFiles));
 
     //structure bonus
-    const structureBonus = await hasGoodStructure(allFiles) ? 0.1 : 0;
+    const structureBonus = (await hasGoodStructure(allFiles)) ? 0.1 : 0;
     const score = docScore + exScore + complexityScore + structureBonus;
-    logger?.debug(`Documentation: ${docScore}, Examples: ${exScore}, Complexity: ${complexityScore}, Structure Bonus: ${structureBonus}`);
+    logger?.debug(
+      `Documentation: ${docScore}, Examples: ${exScore}, Complexity: ${complexityScore}, Structure Bonus: ${structureBonus}`,
+    );
     return Math.max(0, Math.min(1, score));
   } catch (error) {
     logger?.error(`Error in analyzeRepoStatic: ${error}`);
@@ -204,23 +217,28 @@ async function analyzeRepoStatic(repoDir: string): Promise<number> {
   }
 }
 async function analyzeComplexityStatic(allFiles: any[]): Promise<number> {
-  const codeFiles = allFiles.filter(entry => 
-    /\.(ts|js|jsx|tsx|py|java|c|cpp|cs)$/i.test(entry.path)
+  const codeFiles = allFiles.filter((entry) =>
+    /\.(ts|js|jsx|tsx|py|java|c|cpp|cs)$/i.test(entry.path),
   );
   // a lot of files means high code complexity
   return 1 - Math.min(codeFiles.length / 1000, 1);
 }
-async function getAllFilesStatic(repoDir: string, oid: string): Promise<Array<{ path: string, oid: string }>> {
+async function getAllFilesStatic(
+  repoDir: string,
+  oid: string,
+): Promise<Array<{ path: string; oid: string }>> {
   const { tree } = await git.readTree({ fs, dir: repoDir, oid });
-  let allFiles: Array<{ path: string, oid: string }> = [];
+  let allFiles: Array<{ path: string; oid: string }> = [];
 
   for (const entry of tree) {
-    if (entry.type === 'tree') {
+    if (entry.type === "tree") {
       const subFiles = await getAllFilesStatic(repoDir, entry.oid);
-      allFiles = allFiles.concat(subFiles.map(file => ({
-        path: `${entry.path}/${file.path}`,
-        oid: file.oid
-      })));
+      allFiles = allFiles.concat(
+        subFiles.map((file) => ({
+          path: `${entry.path}/${file.path}`,
+          oid: file.oid,
+        })),
+      );
     } else {
       allFiles.push({ path: entry.path, oid: entry.oid });
     }
@@ -228,9 +246,9 @@ async function getAllFilesStatic(repoDir: string, oid: string): Promise<Array<{ 
   return allFiles;
 }
 async function hasGoodStructure(allFiles: any[]): Promise<boolean> {
-  const importantDirs = ['src', 'lib', 'test', 'docs', 'examples'];
-  return importantDirs.every(dir => 
-    allFiles.some(file => file.path.toLowerCase().startsWith(dir + '/'))
+  const importantDirs = ["src", "lib", "test", "docs", "examples"];
+  return importantDirs.every((dir) =>
+    allFiles.some((file) => file.path.toLowerCase().startsWith(dir + "/")),
   );
 }
 
@@ -349,8 +367,13 @@ export async function calculate_responsiveness_metric(
     const issues = response.repository.issues.edges;
 
     // Base case: if there are no pull requests and no issues
-    if (response.repository.pullRequests.totalCount === 0 && response.repository.issues.totalCount === 0) {
-      logger?.info(`Responsiveness score is 0: No pull requests or issues found`);
+    if (
+      response.repository.pullRequests.totalCount === 0 &&
+      response.repository.issues.totalCount === 0
+    ) {
+      logger?.info(
+        `Responsiveness score is 0: No pull requests or issues found`,
+      );
       return {
         ResponsiveMaintainer: 0,
         ResponsiveMaintainer_Latency: getLatency(startTime),
@@ -393,7 +416,9 @@ export async function calculate_responsiveness_metric(
 
     // Base case: if all pull requests and issues are open
     if (resolvedPrs === 0 && resolvedIssues === 0) {
-      logger?.info(`Responsiveness score is 0: No closed pull requests or issues`);
+      logger?.info(
+        `Responsiveness score is 0: No closed pull requests or issues`,
+      );
       return {
         ResponsiveMaintainer: 0,
         ResponsiveMaintainer_Latency: getLatency(startTime),
@@ -583,7 +608,9 @@ async function main() {
 
           const json = JSON.stringify(blankData);
           ndjson_data.push(json);
-          logger?.info(`Added blank data for ${url} due to undefined owner or name`);
+          logger?.info(
+            `Added blank data for ${url} due to undefined owner or name`,
+          );
           continue;
         }
 
