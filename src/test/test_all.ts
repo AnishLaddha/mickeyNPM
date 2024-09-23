@@ -141,6 +141,45 @@ async function runTests() {
         return netScore.NetScore >= 0 && netScore.NetScore <= 1;
     });
 
+    //Test Cases from Piazza
+    await runTest('Wat4hjs', async () => {
+        const { owner, name } = await fetch_repo_info('https://www.npmjs.com/package/wat4hjs');
+        const license =  await calculate_license_metric(owner, name);
+        const rampUp = await calculate_rampup_metric(owner, name);
+        //medium ramp up time and license compatibility of 1
+        return rampUp.RampUp > 0.3 && rampUp.RampUp < 0.7 && license.License == 1 && rampUp.RampUp_Latency > 0 && license.License_Latency > 0;
+    });
+
+    await runTest('SocketIO', async () => {
+        const { owner, name } = await fetch_repo_info('https://www.npmjs.com/package/socket.io');
+        const license =  await calculate_license_metric(owner, name);
+        const rampUp = await calculate_rampup_metric(owner, name);
+        const responsiveness = await calculate_responsiveness_metric(owner, name);
+        //high ramp up score, license compatibility of 1, and medium responsive maintainer
+        return rampUp.RampUp > 0.6 && license.License == 1 && responsiveness.ResponsiveMaintainer > 0.3 && responsiveness.ResponsiveMaintainer < 0.7 && responsiveness.ResponsiveMaintainer_Latency > 0 && rampUp.RampUp_Latency > 0 && license.License_Latency > 0;
+    });
+    await runTest('libvlc', async () => {
+        const { owner, name } = await fetch_repo_info('https://github.com/prathameshnetake/libvlc');
+        const license =  await calculate_license_metric(owner, name);
+        const rampUp = await calculate_rampup_metric(owner, name);
+        //high ramp up score, license compatibility of 1, and medium responsive maintainer
+        return rampUp.RampUp < 0.4 && license.License == 1 && rampUp.RampUp_Latency > 0 && license.License_Latency > 0;
+    });
+    await runTest('ReactJs', async () => {
+        const { owner, name } = await fetch_repo_info('https://www.npmjs.com/package/react');
+        const license =  await calculate_license_metric(owner, name);
+        const rampUp = await calculate_rampup_metric(owner, name);
+        const responsiveness = await calculate_responsiveness_metric(owner, name);
+        //high ramp up score, license compatibility of 1, and high responsive maintainer
+        return rampUp.RampUp > 0.6 && license.License == 1 && responsiveness.ResponsiveMaintainer > 0.6 && responsiveness.ResponsiveMaintainer_Latency > 0 && rampUp.RampUp_Latency > 0 && license.License_Latency > 0;
+    });
+    await runTest('Unlicensed', async () => {
+        const { owner, name } = await fetch_repo_info('https://www.npmjs.com/package/unlicensed');
+        const license =  await calculate_license_metric(owner, name);
+        //license compatibility of 0
+        return license.License == 0 && license.License_Latency > 0;
+    });
+
     const coverage = (passedTests / totalTests) * 100;
     console.log(`Total: ${totalTests}`);
     console.log(`Passed: ${passedTests}`);

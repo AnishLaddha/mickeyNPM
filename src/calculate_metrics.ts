@@ -146,8 +146,7 @@ export async function calculate_rampup_metric(
 
 async function analyzeRepoStatic(repoDir: string): Promise<number> {
   const weights = {
-    readme: 0.1,
-    documentation: 0.3,
+    documentation: 0.4,
     examples: 0.3,
     complexity: 0.3,
   }
@@ -169,33 +168,35 @@ async function analyzeRepoStatic(repoDir: string): Promise<number> {
 
     // Read the tree for this commit
     const allFiles = await getAllFilesStatic(repoDir, oid);
-    // check if a readme exists
-    const readmeRegex = /^readme\.(md|txt|markdown)$/i;
-    const readMeScore = allFiles.some(file => readmeRegex.test(file.path)) ? weights.readme : 0;
     //check if proper documentation exists
     const docFiles = allFiles.filter(file => 
-      file.path.toLowerCase().includes('docs') || 
-      file.path.toLowerCase().endsWith('.md') ||
-      file.path.toLowerCase().endsWith('.markdown') ||
-      file.path.toLowerCase().endsWith('.txt')      ||
-      file.path.toLowerCase().endsWith('.rst') ||
-      file.path.toLowerCase().endsWith('.adoc')
+      file.path.toLowerCase().includes('doc') || 
+      file.path.toLowerCase().includes('guide') ||
+      /\.(md|markdown|txt|rst|adoc|wiki)$/i.test(file.path)
     );
-    const docScore = weights.documentation * Math.min(docFiles.length / 20, 1);
+    const docScore = weights.documentation * Math.min(docFiles.length / 5, 1);
     
     //check if examples exist
-    const exampleFiles = allFiles.filter(file => 
-      file.path.toLowerCase().includes('example') || 
-      file.path.toLowerCase().includes('demo')    ||
-      file.path.toLowerCase().includes('practice')
-    );
-    const exScore = weights.examples * Math.min(exampleFiles.length / 10, 1);
+    const exampleFiles = allFiles.filter(file => {
+      const lowercasePath = file.path.toLowerCase();
+      return lowercasePath.includes('example') ||
+             lowercasePath.includes('demo') ||
+             lowercasePath.includes('sample') ||
+             lowercasePath.includes('tutorial') ||
+             lowercasePath.includes('quickstart') ||
+             lowercasePath.includes('getting-started') ||
+             lowercasePath.includes('usage') ||
+             /test.*\.js/i.test(file.path);
+    });
+    const exScore = weights.examples * Math.min(exampleFiles.length / 5, 1);
     
     // check the code complexity
     const complexityScore = weights.complexity * (await analyzeComplexityStatic(allFiles));
 
-    const score = readMeScore + docScore + exScore + complexityScore;
-    logger?.debug(`Scores - README: ${readMeScore}, Documentation: ${docScore}, Examples: ${exScore}, Complexity: ${complexityScore}`);
+    //structure bonus
+    const structureBonus = await hasGoodStructure(allFiles) ? 0.1 : 0;
+    const score = docScore + exScore + complexityScore + structureBonus;
+    logger?.debug(`Documentation: ${docScore}, Examples: ${exScore}, Complexity: ${complexityScore}, Structure Bonus: ${structureBonus}`);
     return Math.max(0, Math.min(1, score));
   } catch (error) {
     logger?.error(`Error in analyzeRepoStatic: ${error}`);
@@ -225,6 +226,12 @@ async function getAllFilesStatic(repoDir: string, oid: string): Promise<Array<{ 
     }
   }
   return allFiles;
+}
+async function hasGoodStructure(allFiles: any[]): Promise<boolean> {
+  const importantDirs = ['src', 'lib', 'test', 'docs', 'examples'];
+  return importantDirs.every(dir => 
+    allFiles.some(file => file.path.toLowerCase().startsWith(dir + '/'))
+  );
 }
 
 export async function calculate_correctness_metric(
